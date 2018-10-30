@@ -6,10 +6,12 @@ router.get('/', async (ctx) => {
   ctx.body = 'article'
   // 一旦打印出promise，肯定是少加了await
   // 先查询数据库
+  // 获取页数，每页几条
   let page = ctx.query.page || 1;
-  let pageSize = 5;
+  let pageSize = 1;
   //查询总数量
   let count = await DB.count('article', {});
+  // console.log(count)
   let result = await DB.find('article', {}, {}, {
     page: page,
     pageSize: pageSize

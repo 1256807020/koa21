@@ -91,35 +91,35 @@
 
 									<td>
 										{{if $value.is_host==1}}
-										<img src="{{__ROOT__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
 										{{else}}
-										<img src="{{__ROOT__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
 										{{/if}}
 									</td>
 
 									<td>
 										{{if $value.is_best==1}}
-										<img src="{{__ROOT__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
 										{{else}}
-										<img src="{{__ROOT__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
 										{{/if}}
 									</td>
 
 									<td>
 										{{if $value.status==1}}
-										<img src="{{__ROOT__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
 										{{else}}
-										<img src="{{__ROOT__}}/admin/images/no.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
 										{{/if}}
 									</td>
 									<td>
-										<a href="{{__ROOT__}}/admin/article/edit?id={{@$value._id}}">
+										<a href="{{__HOST__}}/admin/article/edit?id={{@$value._id}}">
 											<button class="btn btn-xs btn-info">
 												<i class="icon-edit bigger-120"></i>
 											</button>
 										</a>
 										&nbsp;&nbsp;
-										<a class="delete" href="{{__ROOT__}}/admin/delete?collection=article&id={{@$value._id}}">
+										<a class="delete" href="{{__HOST__}}/admin/delete?collection=article&id={{@$value._id}}">
 											<button class="btn btn-xs btn-danger">
 												<i class="icon-trash bigger-120"></i>
 											</button>
@@ -132,7 +132,7 @@
 
 							</tbody>
 						</table>
-
+						<!-- 下方分页插件要获取id值，在bootstrap中，加入pagination样式类会增加分页样式 -->
 						<div id="page" class="pagination"></div>
 					</div>
 
@@ -148,8 +148,22 @@
 
 
 	{{include 'admin/public/footer.html'}}
-
-
+	<!-- 注意放在jq下面 -->
+	<script src="{{__HOST__}}/admin/jqPaginator.js"></script>
+	<script>
+		$('#page').jqPaginator({
+			totalPages: {{ totalPages }},
+			visiblePages: 1,
+			currentPage: {{ page }},
+			onPageChange: function (num, type) {
+				console.log(num, type)
+				// $('#text').html('当前第' + num + '页');
+				if (type === 'change') {
+					location.href = "{{__HOST__}}/admin/article?page=" + num
+				}
+			}
+		});
+	</script>
 	<script type="text/javascript">
 		jQuery(function ($) {
 

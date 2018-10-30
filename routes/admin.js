@@ -40,6 +40,7 @@ let user = require('./admin/user.js')
 let manage = require('./admin/manage.js')
 let articlecate = require('./admin/articlecate.js')
 let article = require('./admin/article.js')
+// 匹配了上面的路由，就加载模块
 router.use(index)
 router.use('/login', login)
 router.use('/user', user)

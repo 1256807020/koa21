@@ -146,7 +146,7 @@ class Db {
 
         return new ObjectID(id);
     }
-    //ͳ�������ķ���
+    // 获取分页总条数
     count (collectionName, json) {
 
         return new Promise((resolve, reject) => {
