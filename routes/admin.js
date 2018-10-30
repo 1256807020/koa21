@@ -1,6 +1,6 @@
 'use strict'
 let router = require('koa-router')();
-
+let ueditor = require('koa2-ueditor')
 let url = require('url')
 // 配置中间件 获取url地址
 router.use(async (ctx, next) => {
@@ -47,4 +47,11 @@ router.use('/user', user)
 router.use('/manage', manage)
 router.use('/articlecate', articlecate)
 router.use('/article', article)
+// 需要传一个数组：静态目录和 UEditor 配置对象
+// 比如要修改上传图片的类型、保存路径
+// /upload/ueditor/image/{yyyy}{mm}{dd}/{filename} 为配置上传到public目录下的
+router.all('/editorUpload', ueditor(['public', {
+  "imageAllowFiles": [".png", ".jpg", ".jpeg"],
+  "imagePathFormat": "/upload/{yyyy}{mm}{dd}/{filename}"  // 保存为原文件名
+}]))
 module.exports = router.routes()

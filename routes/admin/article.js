@@ -39,12 +39,16 @@ router.get('/', async (ctx) => {
 router.get('/add', async (ctx) => {
   await ctx.render('admin/article/add');
 })
+// ueditor demo
+router.get('/ueditor', async (ctx) => {
+  await ctx.render('admin/article/ueditor');
+})
 //post接收数据
 // 此处upload要与前面var upload = multer({ storage: storage });定义变量名一致；
 // pic要与add.html里图片上传部分的name id值一致
 router.post('/doAdd', upload.single('pic'), async (ctx) => {
   ctx.body = {
-    filename: ctx.req.file.filename,  //返回文件名
+    filename: ctx.req.file ? ctx.req.file.filename : '',  //返回文件名
     body: ctx.req.body
   }
 })
