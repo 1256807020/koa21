@@ -2,6 +2,18 @@
 let router = require('koa-router')()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
+// 图片上传模块
+let multer = require('koa-multer');
+var storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'public/upload');   /*配置图片上传的目录  public目录下必须存在upload文件夹   注意：图片上传的目录必须存在*/
+  },
+  filename: function (req, file, cb) {   /*图片上传完成重命名*/
+    var fileFormat = (file.originalname).split(".");   /*获取后缀名  分割数组*/
+    cb(null, Date.now() + "." + fileFormat[fileFormat.length - 1]);
+  }
+})
+var upload = multer({ storage: storage });
 router.get('/', async (ctx) => {
   ctx.body = 'article'
   // 一旦打印出promise，肯定是少加了await
@@ -25,12 +37,16 @@ router.get('/', async (ctx) => {
   });
 })
 router.get('/add', async (ctx) => {
-  // 获取一级分类
-  let result = await DB.find('article', { 'pid': '0' })
-  // console.log(result)
-  await ctx.render('admin/article/add', {
-    catelist: result
-  })
+  await ctx.render('admin/article/add');
+})
+//post接收数据
+// 此处upload要与前面var upload = multer({ storage: storage });定义变量名一致；
+// pic要与add.html里图片上传部分的name id值一致
+router.post('/doAdd', upload.single('pic'), async (ctx) => {
+  ctx.body = {
+    filename: ctx.req.file.filename,  //返回文件名
+    body: ctx.req.body
+  }
 })
 
 module.exports = router.routes()
