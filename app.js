@@ -35,6 +35,7 @@ render(app, {
         return sd.format(value, 'YYYY-MM-DD HH:mm');
     } /*扩展模板里面的方法*/
 })
+// 静态资源默认目录
 app.use(static(__dirname + '/public'))
 
 let index = require('./routes/index.js')

@@ -83,7 +83,9 @@
 									</td>
 
 									<td>
-										{{$value.last_time | dateFormat}}
+										{{if $value.add_time}}
+										{{$value.add_time | dateFormat}}
+										{{/if}}
 									</td>
 									<td>
 										<input type="text" value="{{$value.sort || 0}}" class="sort_input" onblur="app.changeSort(this,'article','{{@$value._id}}')" />
@@ -119,7 +121,7 @@
 											</button>
 										</a>
 										&nbsp;&nbsp;
-										<a class="delete" href="{{__HOST__}}/admin/delete?collection=article&id={{@$value._id}}">
+										<a class="delete" href="{{__HOST__}}/admin/remove?collectionName=article&id={{@$value._id}}">
 											<button class="btn btn-xs btn-danger">
 												<i class="icon-trash bigger-120"></i>
 											</button>

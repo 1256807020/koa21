@@ -47,7 +47,17 @@ class Db {
         })
 
     }
+    /*
 
+     DB.find('user',{})  返回所有数据
+     DB.find('user',{},{"title":1})    返回所有数据  只返回一列
+     DB.find('user',{},{"title":1},{   返回第二页的数据
+        page:2,
+        pageSize:20,
+        sort:{"add_time":-1}
+     })
+     js中实参和形参可以不一样      arguments 对象接收实参传过来的数据
+    * */
     find (collectionName, json1, json2, json3) {
         if (arguments.length == 2) {
             var attr = {};
@@ -63,6 +73,11 @@ class Db {
             var page = json3.page || 1;
             var pageSize = json3.pageSize || 20;
             var slipNum = (page - 1) * pageSize;
+            if (json3.sortJson) {
+                var sortJson = json3.sortJson;
+            } else {
+                var sortJson = {}
+            }
         } else {
             console.log('传入的参数错误')
         }
@@ -71,7 +86,7 @@ class Db {
 
             this.connect().then((db) => {
                 //var result=db.collection(collectionName).find(json);
-                var result = db.collection(collectionName).find(json1, { fields: attr }).skip(slipNum).limit(pageSize);
+                var result = db.collection(collectionName).find(json1, { fields: attr }).skip(slipNum).limit(pageSize).sort(sortJson)
                 result.toArray(function (err, docs) {
 
                     if (err) {
