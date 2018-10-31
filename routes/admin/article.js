@@ -37,7 +37,9 @@ router.get('/', async (ctx) => {
   });
 })
 router.get('/add', async (ctx) => {
-  await ctx.render('admin/article/add');
+  var catelist = await DB.find('articlecate', {})
+  // console.log(catelist)
+  await ctx.render('admin/article/add', { catelist: tools.cateToList(catelist) });
 })
 // ueditor demo
 router.get('/ueditor', async (ctx) => {
