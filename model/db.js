@@ -157,7 +157,7 @@ class Db {
             })
         })
     }
-    getObjectId (id) {    /*mongodb�����ѯ _id ���ַ���ת���ɶ���*/
+    getObjectId (id) {    
 
         return new ObjectID(id);
     }

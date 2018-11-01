@@ -1,3 +1,11 @@
-.form-horizontal .form-group{
+.form-horizontal .form-group {
   height: 44px;
+}
+
+.sort_input {
+  width: 40px;
+}
+
+#page {
+  float: right;
 }

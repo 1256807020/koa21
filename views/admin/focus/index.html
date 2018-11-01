@@ -43,7 +43,7 @@
 
 					<div class="page-header">
 						<h1>
-							新闻列表
+							轮播图列表
 						</h1>
 					</div><!-- /.page-header -->
 
@@ -56,77 +56,58 @@
 							<thead>
 								<tr>
 
-									<th class="center">标题</th>
-									<th class="center">分类</th>
+									<th class="center">名称</th>
+
 									<th class="center">
-										<i class="icon-time bigger-110 hidden-480"></i>
-										发布时间
+
+										图片
 									</th>
-									<th width="60px;" class="center">排序</th>
-									<th width="60px;" class="center">热门</th>
-									<th width="60px;" class="center">推荐</th>
-									<th width="60px;" class="center">状态</th>
+									<th class="center">链接地址</th>
+									<th class="center">排序</th>
+									<th class="center">状态</th>
+
 									<th width="100px;" class="center">操作</th>
 								</tr>
 							</thead>
 
 							<tbody>
-
 								{{each list}}
 								<tr class="">
-
 									<td>
 										{{$value.title}}
 									</td>
 									<td>
-										{{$value.catename}}
+										<img src="{{__HOST__}}/{{$value.pic}}" alt="{{$value.title}}" style="width:80px;">
 									</td>
-
+									<td>{{$value.url}}</td>
 									<td>
-										{{if $value.add_time}}
-										{{$value.add_time | dateFormat}}
-										{{/if}}
+										<input type="text" value="{{$value.sort || 0}}" class="sort_input" onblur="app.changeSort(this,'focus','{{@$value._id}}')" />
 									</td>
-									<td>
-										<input type="text" value="{{$value.sort || 0}}" class="sort_input" onblur="app.changeSort(this,'article','{{@$value._id}}')" />
-									</td>
-
-									<td>
-										{{if $value.is_host==1}}
-										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
-										{{else}}
-										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_host','{{@$value._id}}')" />
-										{{/if}}
-									</td>
-
-									<td>
-										{{if $value.is_best==1}}
-										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
-										{{else}}
-										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','is_best','{{@$value._id}}')" />
-										{{/if}}
-									</td>
-
-									<td>
+									<td class="hidden-480">
 										{{if $value.status==1}}
-										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/yes.gif" onclick="app.toggle(this,'focus','status','{{@$value._id}}')" />
 										{{else}}
-										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'article','status','{{@$value._id}}')" />
+										<img src="{{__HOST__}}/admin/images/no.gif" onclick="app.toggle(this,'focus','status','{{@$value._id}}')" />
 										{{/if}}
 									</td>
-									<td>
-										<a href="{{__HOST__}}/admin/article/edit?id={{@$value._id}}">
-											<button class="btn btn-xs btn-info">
-												<i class="icon-edit bigger-120"></i>
-											</button>
-										</a>
-										&nbsp;&nbsp;
-										<a class="delete" href="{{__HOST__}}/admin/remove?collectionName=article&id={{@$value._id}}">
-											<button class="btn btn-xs btn-danger">
-												<i class="icon-trash bigger-120"></i>
-											</button>
-										</a>
 
+									<td>
+										<div class="visible-md visible-lg visible-xs visible-sm btn-group center">
+
+											<a href="{{__HOST__}}/admin/focus/edit?id={{@$value._id}}">
+												<button class="btn btn-xs btn-info">
+													<i class="icon-edit bigger-120"></i>
+												</button>
+											</a>
+											<!-- 此处实际使用的是admin表，而不是manage -->
+											<a class='delete' href="{{__HOST__}}/admin/remove?collectionName=focus&id={{@$value._id}}">
+												<button class="btn btn-xs btn-danger">
+													<i class="icon-trash bigger-120"></i>
+												</button>
+											</a>
+
+
+										</div>
 
 									</td>
 								</tr>
@@ -134,7 +115,6 @@
 
 							</tbody>
 						</table>
-						<!-- 下方分页插件要获取id值，在bootstrap中，加入pagination样式类会增加分页样式 -->
 						<div id="page" class="pagination"></div>
 					</div>
 
@@ -161,11 +141,12 @@
 				console.log(num, type)
 				// $('#text').html('当前第' + num + '页');
 				if (type === 'change') {
-					location.href = "{{__HOST__}}/admin/article?page=" + num
+					location.href = "{{__HOST__}}/admin/focus?page=" + num
 				}
 			}
 		});
 	</script>
+
 	<script type="text/javascript">
 		jQuery(function ($) {
 

@@ -2,18 +2,7 @@
 let router = require('koa-router')()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
-// 图片上传模块
-let multer = require('koa-multer');
-var storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'public/upload');   /*配置图片上传的目录  public目录下必须存在upload文件夹   注意：图片上传的目录必须存在*/
-  },
-  filename: function (req, file, cb) {   /*图片上传完成重命名*/
-    var fileFormat = (file.originalname).split(".");   /*获取后缀名  分割数组*/
-    cb(null, Date.now() + "." + fileFormat[fileFormat.length - 1]);
-  }
-})
-var upload = multer({ storage: storage });
+
 router.get('/', async (ctx) => {
   ctx.body = 'article'
   // 一旦打印出promise，肯定是少加了await
@@ -55,7 +44,7 @@ router.get('/add', async (ctx) => {
 //post接收数据
 // 此处upload要与前面var upload = multer({ storage: storage });定义变量名一致；
 // pic要与add.html里图片上传部分的name id值一致
-router.post('/doAdd', upload.single('img_url'), async (ctx) => {
+router.post('/doAdd', tools.multer().single('img_url'), async (ctx) => {
   // ctx.body = {
   //   filename: ctx.req.file ? ctx.req.file.filename : '',  //返回文件名
   //   body: ctx.req.body
@@ -99,7 +88,7 @@ router.get('/edit', async (ctx) => {
   });
 })
 
-router.post('/doEdit', upload.single('img_url'), async (ctx) => {
+router.post('/doEdit', tools.multer().single('img_url'), async (ctx) => {
 
   let prevPage = ctx.req.body.prevPage || '';  /*上一页的地址*/
   let id = ctx.req.body.id;
@@ -127,6 +116,7 @@ router.post('/doEdit', upload.single('img_url'), async (ctx) => {
       pid, catename, title, author, status, is_best, is_hot, is_new, keywords, description, content
     }
   }
+  console.log(json)
   DB.update('article', { "_id": DB.getObjectId(id) }, json);
 
 
