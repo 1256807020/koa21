@@ -1,0 +1,213 @@
+{{include 'admin/public/header.html'}}
+
+<body>
+	{{include 'admin/public/nav_top.html'}}
+
+	<div class="main-container" id="main-container">
+		<script type="text/javascript">
+			try { ace.settings.check('main-container', 'fixed') } catch (e) { }
+		</script>
+
+		<div class="main-container-inner">
+			<a class="menu-toggler" id="menu-toggler" href="#">
+				<span class="menu-text"></span>
+			</a>
+
+			{{include 'admin/public/nav_left.html'}}
+
+			<div class="main-content">
+				<div class="breadcrumbs" id="breadcrumbs">
+					<script type="text/javascript">
+						try { ace.settings.check('breadcrumbs', 'fixed') } catch (e) { }
+					</script>
+
+					<ul class="breadcrumb">
+						<li>
+							<i class="icon-home home-icon"></i>
+							<a href="#">首页</a>
+						</li>
+						<li class="active">控制台</li>
+					</ul><!-- .breadcrumb -->
+
+					<div class="nav-search" id="nav-search">
+						<form class="form-search">
+							<span class="input-icon">
+								<input type="text" placeholder="Search ..." class="nav-search-input" id="nav-search-input" autocomplete="off" />
+								<i class="icon-search nav-search-icon"></i>
+							</span>
+						</form>
+					</div><!-- #nav-search -->
+				</div>
+
+				<div class="page-content">
+
+					<div class="page-header">
+						<h1>
+							系统
+						</h1>
+					</div><!-- /.page-header -->
+					<!--表格-->
+					<!-- 只能设置，所以要提前建好表，并且有模拟数据，废了半天功夫 -->
+					<div class="table-responsive">
+						<form action="{{__HOST__}}/admin/setting/doEdit" method="post" class="form-horizontal" role="form" enctype="multipart/form-data">
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站名称:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_title" name="site_title" class="col-xs-10 col-sm-5" value="{{list.site_title}}" />
+								</div>
+							</div>
+							<div class="form-group" style="height: 100px;">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站logo:</label>
+
+								<div class="col-sm-10">
+									<input type="file" name="site_logo" />
+
+									<img src="{{__HOST__}}/{{list.site_logo}}" class="img" style="width: 80px;" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站链接:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_url" name="site_url" class="col-xs-10 col-sm-5" value="{{list.site_url}}" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站关键字:</label>
+
+								<div class="col-sm-10">
+									<input type="text" id="site_keywords" name="site_keywords" class="col-xs-10 col-sm-5" value="{{list.site_keywords}}" />
+								</div>
+							</div>
+
+							<div class="form-group" style="height: 100px;">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站描述:</label>
+
+								<div class="col-sm-10">
+									<textarea name="site_description" id="site_description" cols="80" rows="5">{{list.site_description}}</textarea>
+								</div>
+							</div>
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">网站备案号:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_icp" name="site_icp" class="col-xs-10 col-sm-5" value="{{list.site_icp}}" />
+								</div>
+							</div>
+
+
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">客服QQ:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_qq" name="site_qq" class="col-xs-10 col-sm-5" value="{{list.site_qq}}" />
+								</div>
+							</div>
+
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">客服电话:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_tel" name="site_tel" class="col-xs-10 col-sm-5" value="{{list.site_tel}}" />
+								</div>
+							</div>
+
+
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="site_title">公司地址:</label>
+								<div class="col-sm-10">
+									<input type="text" id="site_address" name="site_address" class="col-xs-10 col-sm-5" value="{{list.site_address}}" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right">网站是否关闭：</label>
+								<div class="col-sm-10">
+									<label for="status1">开启网站：</label><input type="radio" name="site_status" id="status1" value="1" checked />
+									&nbsp;
+									<label for="status2">关闭网站:</label><input type="radio" name="site_status" id="status2" value="0" />
+								</div>
+							</div>
+							<div class="form-group">
+								<label class="col-sm-2 control-label no-padding-right" for="submit"></label>
+								<div class="col-sm-10">
+									<button type="submit" class="btn btn-primary">提交</button>
+								</div>
+
+							</div>
+
+
+
+
+
+						</form>
+
+					</div>
+
+				</div>
+			</div><!-- /.main-content -->
+
+		</div><!-- /.main-container-inner -->
+
+		<a href="#" id="btn-scroll-up" class="btn-scroll-up btn btn-sm btn-inverse">
+			<i class="icon-double-angle-up icon-only bigger-110"></i>
+		</a>
+	</div><!-- /.main-container -->
+	{{include 'admin/public/footer.html'}}
+	{{include 'admin/public/footer_other.html'}}
+
+	<script type="text/javascript">
+
+		$(function () {
+
+
+			function showErrorAlert(reason, detail) {
+				var msg = '';
+				if (reason === 'unsupported-file-type') { msg = "Unsupported format " + detail; }
+				else {
+					console.log("error uploading file", reason, detail);
+				}
+				$('<div class="alert"> <button type="button" class="close" data-dismiss="alert">&times;</button>' +
+					'<strong>File upload error</strong> ' + msg + ' </div>').prependTo('#alerts');
+			}
+
+			$('#editor1').ace_wysiwyg({
+				toolbar:
+					[
+						'font',
+						null,
+						'fontSize',
+						null,
+						{ name: 'bold', className: 'btn-info' },
+						{ name: 'italic', className: 'btn-info' },
+						{ name: 'strikethrough', className: 'btn-info' },
+						{ name: 'underline', className: 'btn-info' },
+						null,
+						{ name: 'insertunorderedlist', className: 'btn-success' },
+						{ name: 'insertorderedlist', className: 'btn-success' },
+						{ name: 'outdent', className: 'btn-purple' },
+						{ name: 'indent', className: 'btn-purple' },
+						null,
+						{ name: 'justifyleft', className: 'btn-primary' },
+						{ name: 'justifycenter', className: 'btn-primary' },
+						{ name: 'justifyright', className: 'btn-primary' },
+						{ name: 'justifyfull', className: 'btn-inverse' },
+						null,
+						{ name: 'createLink', className: 'btn-pink' },
+						{ name: 'unlink', className: 'btn-pink' },
+						null,
+						{ name: 'insertImage', className: 'btn-success' },
+						null,
+						'foreColor',
+						null,
+						{ name: 'undo', className: 'btn-grey' },
+						{ name: 'redo', className: 'btn-grey' }
+					],
+				'wysiwyg': {
+					fileUploadError: showErrorAlert
+				}
+			}).prev().addClass('wysiwyg-style2');
+
+		})
+
+
+	</script>
+
+</body>
+
+</html>

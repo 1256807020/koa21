@@ -43,6 +43,7 @@ let article = require('./admin/article.js')
 let focus = require('./admin/focus.js')
 let link = require('./admin/link.js')
 let nav = require('./admin/nav.js')
+let setting = require('./admin/setting.js')
 // 匹配了上面的路由，就加载模块
 router.use(index)
 router.use('/login', login)
@@ -53,6 +54,7 @@ router.use('/article', article)
 router.use('/focus', focus)
 router.use('/link', link)
 router.use('/nav', nav)
+router.use('/setting', setting)
 // 需要传一个数组：静态目录和 UEditor 配置对象
 // 比如要修改上传图片的类型、保存路径
 // /upload/ueditor/image/{yyyy}{mm}{dd}/{filename} 为配置上传到public目录下的
