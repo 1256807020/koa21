@@ -71,10 +71,8 @@
 							<tbody>
 								{{each list}}
 								<tr class="">
-
-
 									<td>
-										{{$value.title}}
+										{{$value.title}}--{{@$value._id}}
 									</td>
 									<!-- <td>{{$value.lasttime | dateFormat}}</td> -->
 
@@ -110,7 +108,7 @@
 
 
 									<td>
-										--------------{{$value.title}}
+										--------------{{$value.title}}--{{@$value._id}}
 									</td>
 									<!-- <td>{{$value.lasttime | dateFormat}}</td> -->
 

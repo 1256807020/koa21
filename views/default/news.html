@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>成功案例</title>
+	<title>heder_nav-menu</title>
+	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/reset.css" />
+	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/common.css" />
+	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/heder_nav-menu.css" />
+	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/successful_case.css" />
+	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/bootstrap.min.css" />
+</head>
+
+<body>
+
+
+	{{include 'default/public/header.html'}}
+
+	<div id="header_nav-wrapper">
+		<div class="header_nav">
+			<h2>news案例 &#160; <span>让品牌与您同在</span></h2>
+
+
+		</div>
+
+
+
+	</div>
+
+	<div id="header_title-wrapper">
+
+		<div class="header_title clear">
+			<p>
+				{{each newslist}}
+				<a {{if pid==$value._id}} class="active" {{/if}} href="{{__HOST__}}/news?pid={{@$value._id}}">{{$value.title}}</a>
+				{{/each}}
+
+			</p>
+		</div>
+
+
+	</div>
+
+
+	<div id="main_wrapper">
+
+
+		<div class="main">
+			<ul class="clear">
+				{{each articlelist}}
+				<li>
+
+					<a href="{{__HOST__}}/content/{{@$value._id}}"><img src="{{__HOST__}}/{{@$value.img_url}}" /></a>
+
+					<p>{{@$value.title}}</p>
+
+
+				</li>
+				{{/each}}
+
+
+			</ul>
+
+
+		</div>
+
+
+		<div id="page" class="pagination"></div>
+
+	</div>
+
+
+
+	<div id="footer-wrapper">
+		<div class="footer-inner">
+			<p>
+				<a href="#">网站首页</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">关于我们</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">产品展示</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">客户案例</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">新闻资讯</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">帮助中心</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">解决方案</a>&nbsp;&nbsp;|&nbsp;
+				<a href="#">联系我们</a>&nbsp;&nbsp;&nbsp;&nbsp;
+			</p>
+			<p>Copyright © 2002-2015上海机械设备服务有限公司 版权所有 Power by DedeCms</p>
+			<p>电话：15918779820 E-mail：89898981@qq.com 地址：上海市沙河广园东路1858新天地服装城</p>
+		</div>
+	</div>
+
+
+
+
+	<!-- 注意分页中的｝坑死我了 -->
+	<script src="/default/js/jquery-1.10.2.min.js"></script>
+	<script src="/default/js/jqPaginator.js"></script>
+	<script>
+		$('#page').jqPaginator({
+			totalPages: {{totalPages}},
+			visiblePages: 3,
+			currentPage: {{page}},
+			onPageChange: function (num, type) {
+				
+				if (type == 'change') {
+					{{if pid}}
+					location.href = "/case?pid={{pid}}&page=" + num;
+					{{else}}
+          location.href = "/case?page=" + num;
+		{{/if}}
+			}}})
+	</script>
+</body>
+
+</html>
