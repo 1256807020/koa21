@@ -6,7 +6,8 @@ let Koa = require('koa'),
     session = require('koa-session'),
     sd = require('silly-datetime'),
     bodyParser = require('koa-bodyparser'),
-    jsonp = require('koa-jsonp')
+    jsonp = require('koa-jsonp'),
+    cors = require('koa-cors')
 // 实例化
 let app = new Koa()
 // 配置jsonp的中间件
@@ -14,7 +15,8 @@ app.use(jsonp())
 //配置post提交数据的中间件
 app.use(bodyParser())
 //配置session的中间件
-
+// koa2允许cors跨域
+app.use(cors())
 app.keys = ['some secret hurr']
 const CONFIG = {
     key: 'koa:sess',

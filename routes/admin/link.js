@@ -64,7 +64,7 @@ router.post('/doEdit', tools.multer().single('pic'), async (ctx) => {
   } else {
     var json = { title, url, sort, status, add_time }
   }
-  console.log(json)
+  // console.log(json)
   // await DB.update('link', { '_id': DB.getObjectId(id) }, json)
   await DB.update('link', { "_id": DB.getObjectId(id) }, json);
   // 跳转

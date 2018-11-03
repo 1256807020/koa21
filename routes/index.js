@@ -5,16 +5,20 @@ var DB = require('../model/db.js')
 var url = require('url')
 // 配置中间件，这样nav就可以全局使用了
 router.use(async (ctx, next) => {
-// 配置中间件 获取url的地址
-var pathname = url.parse(ctx.request.url).pathname
+    // 配置中间件 获取url的地址
+    var pathname = url.parse(ctx.request.url).pathname
     // console.log(pathname)
     var navResult = await DB.find('nav', { $or: [{ 'status': 1 }, { 'status': '1' }] }, {}, {
         sortJson: { "sort": 1 }
     })
+    //获取系统信息
+
+    var setting = await DB.find('setting', {});
     ctx.state.__HOST__ = 'http://' + ctx.request.header.host
     //模板引擎配置全局的变量
     ctx.state.nav = navResult;
     ctx.state.pathname = pathname;
+    ctx.state.setting = setting[0];
     await next()
 })
 router.get('/', async (ctx) => {
@@ -24,15 +28,26 @@ router.get('/', async (ctx) => {
         sortJson: { "sort": 1 }
     })
     console.timeEnd('start');
+    //轮播图  注意状态数据不一致问题  建议在后台增加数据的时候状态 转化成number类型
+    //导航条的数据
+    var links = await DB.find('link', { $or: [{ 'status': 1 }, { 'status': '1' }] }, {}, {
+
+        sortJson: { 'sort': 1 }
+    })
+
     // console.log(focusResult)
     ctx.render('default/index', {
-        focus: focusResult
+        focus: focusResult,
+        links: links
     });
 })
 router.get('/news', async (ctx) => {
     var pid = ctx.query.pid
     var page = ctx.query.page || 1;
     var pageSize = 3;
+    ctx.state.setting.site_title = 'xxx新闻页面';
+    ctx.state.setting.site_keywords = 'xxx新闻页面';
+    ctx.state.setting.site_description = 'xxx新闻页面';
     // console.log(pid)
     //获取成功案例下面的分类
     var newsResult = await DB.find('articlecate', { 'pid': '5bdaf18de67d082570b10a23' })
@@ -78,14 +93,44 @@ router.get('/service', async (ctx) => {
 })
 router.get('/content/:id', async (ctx) => {
 
-    console.log(ctx.params);
+    // console.log(ctx.params);
     // 获取文章id值
     var id = ctx.params.id;
 
     var content = await DB.find('article', { '_id': DB.getObjectId(id) });
 
-    console.log(content);
+    // console.log(content);
+    /*
+       1.根据文章获取文章的分类信息
+   
+       2、根据文章的分类信息，去导航表里面查找当前分类信息的url
+   
+       3、把url赋值给 pathname
+       * */
+    //获取当前文章的分类信息
+    var cateResult = await DB.find('articlecate', { '_id': DB.getObjectId(content[0].pid) });
 
+    //  console.log(cateResult,cateResult[0].pid);
+    if (cateResult[0].pid != 0) {  /*子分类*/
+        //找到当前分类的父亲分类
+        var parentCateResult = await DB.find('articlecate', { '_id': DB.getObjectId(cateResult[0].pid) });
+
+        var navResult = await DB.find('nav', { $or: [{ 'title': cateResult[0].title }, { 'title': parentCateResult[0].title }] });
+
+    } else {  /*父分类*/
+
+        //在导航表查找当前分类对应的url信息
+        var navResult = await DB.find('nav', { 'title': cateResult[0].title });
+
+    }
+
+    if (navResult.length > 0) {
+        //把url赋值给 pathname
+        ctx.state.pathname = navResult[0]['url'];
+
+    } else {
+        ctx.state.pathname = '/';
+    }
     ctx.render('default/content', {
         list: content[0]
 

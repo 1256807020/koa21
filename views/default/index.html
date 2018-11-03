@@ -3,12 +3,14 @@
 
 <head>
   <meta charset="utf-8">
-  <title>麦田网</title>
-  <link rel="stylesheet" type="text/css" href="default/css/reset.css" />
-  <link rel="stylesheet" type="text/css" href="default/css/common.css" />
-  <link rel="stylesheet" type="text/css" href="default/css/index.css" />
-  <link rel="stylesheet" type="text/css" href="default/css/swiper.min.css" />
-  <script type="text/javascript" src="default/js/swiper.min.js">
+  <title>{{setting.site_title}}</title>
+  <meta name="Keywords" content="{{setting.site_keywords}}" />
+  <meta name="Description" content="{{setting.site_description}}" />
+  <link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/reset.css" />
+  <link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/common.css" />
+  <link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/index.css" />
+  <link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/swiper.min.css" />
+  <script type="text/javascript" src="{{__HOST__}}/default/js/swiper.min.js">
   </script>
 
 </head>
@@ -102,14 +104,9 @@
   <div id="footer-wrapper">
     <div class="footer-inner">
       <p>
-        <a href="#">网站首页</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">关于我们</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">产品展示</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">客户案例</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">新闻资讯</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">帮助中心</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">解决方案</a>&nbsp;&nbsp;|&nbsp;
-        <a href="#">联系我们</a>&nbsp;&nbsp;&nbsp;&nbsp;
+        {{each links}}
+        <a href="{{@$value.url}}" target="_blank">{{@$value.title}}</a>&nbsp;&nbsp;|&nbsp;
+        {{/each}}
       </p>
       <p>Copyright © 2002-2015上海机械设备服务有限公司 版权所有 Power by DedeCms</p>
       <p>电话：15918779820 E-mail：89898981@qq.com 地址：上海市沙河广园东路1858新天地服装城</p>

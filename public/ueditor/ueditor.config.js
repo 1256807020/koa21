@@ -48,7 +48,7 @@
         //     'inserttable', 'deletetable', 'preview', 'insertparagraphbeforetable', 'insertrow', 'deleterow', 'insertcol', 'deletecol', 'mergecells', 'mergeright', 'mergedown', 'splittocells', 'splittorows', 'splittocols', 'charts', '|',
         //     'print', 'searchreplace', 'drafts', 'help'
         // ]]
-        , toolbars: [["fullscreen", "source", "undo", "redo", "insertunorderedlist", "insertorderedlist", "link", "unlink", "help", "attachment", "simpleupload", "insertimage", "emotion", "pagebreak", "date", "bold", "italic", "fontborder", "strikethrough", "underline", "forecolor", "justifyleft", "justifycenter", "justifyright", "justifyjustify", "paragraph", "rowspacingbottom", "rowspacingtop", "lineheight", "insertcode"]]
+        , toolbars: [["fullscreen", "source", "undo", "redo", "insertunorderedlist", "insertorderedlist", "link", "unlink", "help", "attachment", "simpleupload", "insertimage", "emotion", "pagebreak", "date", "bold", "italic", "fontborder", "strikethrough", "underline", "forecolor", "justifyleft", "justifycenter", "justifyright", "justifyjustify", "paragraph", "rowspacingbottom", "rowspacingtop", "lineheight", "insertcode","fontsize",]]
         //当鼠标放在工具栏上时显示的tooltip提示,留空支持自动多语言配置，否则以配置值为准
         //,labelMap:{
         //    'anchor':'', 'undo':''
