@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "lint": "eslint --ext .js,.vue src",
+    "lint": "eslint --fix --ext .js,.vue src",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -75,7 +75,11 @@
     "eslint-plugin-html": "^4.0.6",
     "koa-cors": "0.0.16",
     "koa-multer": "^1.0.2",
+    "koa-nunjucks-2": "^3.0.2",
     "koa2-ueditor": "^1.0.1",
+    "log4js": "^3.0.6",
+    "nunjucks": "^3.1.4",
+    "sha1": "^1.1.1",
     "ueditor": "^1.2.3"
   }
 }
