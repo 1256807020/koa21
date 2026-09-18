@@ -17,6 +17,10 @@ const config = require('./model/config')
 const createLogger = require('./model/logger')
 const tools = require('./model/tools')
 const DB = require('./model/db')
+const CODE = require('./utils/code')
+const { fail } = require('./utils/response')
+const { STATUS_BY_CODE } = require('./utils/handle')
+const { createRateLimit } = require('./middleware/rateLimit')
 
 const log = createLogger('app')
 const app = new Koa()
@@ -25,19 +29,38 @@ const app = new Koa()
 app.proxy = config.trustProxy
 app.keys = [config.session.secret]
 
-// ---------------- 1. 全局异常处理：别让一个错误把服务带崩 ----------------
+// ---------------- 1. 全局异常处理 + 统一 404 ----------------
+// 教学点：这里是"最后一道兜底出口"，必须和业务接口用**同一套响应体**。
+// 修复前的问题：`/api` 走到这里返回的是旧风格 `{ success:false, message }`，
+// 而业务接口返回 `{ code, message, data }` —— 前端要写两套解析逻辑，属于响应体不统一。
+// 现在 API 一律走 fail()，前端只需判 code。
 app.use(async (ctx, next) => {
   try {
     await next()
+
+    // 统一 404：API 回 JSON，页面回 HTML（API 之前会吐 HTML 片段，前端 JSON.parse 直接炸）
     if (ctx.status === 404 && !ctx.body) {
-      ctx.status = 404
-      ctx.body = '<h3>404 Not Found</h3><p>页面不存在</p>'
+      if (ctx.path.startsWith('/api')) {
+        fail(ctx, CODE.NOT_FOUND, '接口不存在', null, 404)
+      } else {
+        ctx.status = 404
+        ctx.body = '<h3>404 Not Found</h3><p>页面不存在</p>'
+      }
     }
   } catch (err) {
+    const c = err.code || CODE.UNKNOWN
+    // 状态码优先级：显式 err.status > 业务错误码映射（如 PARAM_ERROR→400、NOT_FOUND→404） > 500。
+    // 若不看 err.code，像"非法 id 参数"这种客户端错误会被笼统地报成 500，
+    // 既误导调用方，也会污染错误日志/告警。业务错误码 → HTTP 状态的映射表在 utils/handle.js。
+    const status = err.status && err.status >= 400
+      ? err.status
+      : (STATUS_BY_CODE[c] || 500)
     log.error(`${ctx.method} ${ctx.url} 处理失败:`, err.stack || err.message)
-    ctx.status = err.status && err.status >= 400 ? err.status : 500
+
     if (ctx.path.startsWith('/api')) {
-      ctx.body = { success: false, message: config.isProd ? '服务器内部错误' : err.message }
+      // 生产环境对"未知错误"隐藏细节，避免把栈/表结构泄露给外部
+      const message = (config.isProd && c === CODE.UNKNOWN) ? '服务器内部错误' : err.message
+      fail(ctx, c, message, null, status)
     } else {
       await ctx.render('admin/error', {
         message: config.isProd ? '服务器内部错误' : err.message,
@@ -57,6 +80,16 @@ app.use(async (ctx, next) => {
   else if (ctx.status >= 400) log.warn(line)
   else log.debug(line)
 })
+
+// ---------------- 2.5 全局限流（按 IP）----------------
+// 只罩 /api 与 /admin：静态资源（图片/CSS/JS）不限流，否则正常浏览页面就会被误伤。
+// /healthz 不在这两个前缀内，因此自动豁免（探活不能被限流）。
+// ⚠️ 内存计数仅适合单实例；多实例须换 Redis（见 middleware/rateLimit.js 注释）。
+app.use(createRateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.max,
+  skip: (ctx) => !(ctx.path.startsWith('/api') || ctx.path.startsWith('/admin'))
+}))
 
 // ---------------- 3. CORS：只对 /api 开放，后台接口不对外跨域 ----------------
 const apiCors = cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] })
@@ -106,8 +139,14 @@ render(app, {
 })
 
 // ---------------- 7. 静态资源 ----------------
+// setHeaders：给所有静态文件加 X-Content-Type-Options: nosniff，
+// 强制浏览器严格按响应 Content-Type 解析，禁止「嗅探」成可执行的 HTML/JS——
+// 这是防「上传 .png 实为 HTML」被当脚本执行（MIME 嗅探 XSS）的关键补丁（配合 tools.multer 白名单）。
 app.use(serve(path.join(config.root, 'public'), {
-  maxage: config.isProd ? 7 * 24 * 60 * 60 * 1000 : 0
+  maxage: config.isProd ? 7 * 24 * 60 * 60 * 1000 : 0,
+  setHeaders (res) {
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+  }
 }))
 
 // ---------------- 8. 站点地址（模板里用的 __HOST__） ----------------
@@ -122,8 +161,36 @@ const index = require('./routes/index.js')
 const api = require('./routes/api.js')
 const admin = require('./routes/admin.js')
 
+// 健康检查：给负载均衡 / K8s / 监控探活用（不鉴权、不限流、不渲染模板）
+// 教学点：探活要"轻"，只查最关键的依赖（DB）；不要把业务校验塞进来，否则探活本身会拖垮服务。
+router.get('/healthz', async (ctx) => {
+  const startedAt = Date.now()
+  let db = 'up'
+  try {
+    await DB.query('SELECT 1')
+  } catch (err) {
+    db = 'down'
+  }
+  const healthy = db === 'up'
+  ctx.status = healthy ? 200 : 503
+  ctx.body = {
+    status: healthy ? 'ok' : 'degraded',
+    env: config.env,
+    uptime: Math.floor(process.uptime()), // 进程已运行秒数
+    db,
+    latencyMs: Date.now() - startedAt,
+    time: new Date().toISOString()
+  }
+})
+
 router.use('/admin', admin)
-router.use('/api', api)
+
+// —— API 版本化（P1）——
+// 同一套路由挂两个前缀：新代码/新前端统一用 /api/v1，/api 作为兼容旧路径保留。
+// 注意顺序：'/api/v1' 必须写在 '/api' 前面，因为 '/api' 的前缀匹配也会命中 '/api/v1/xxx'，
+// 先注册的更具体的那个才会优先处理。
+router.use('/api/v1', api) // 正式版本
+router.use('/api', api)    // 兼容旧路径（deprecated，后续可加告警或下线）
 router.use(index)
 
 app.use(router.routes())

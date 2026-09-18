@@ -3,6 +3,18 @@ const Router = require('@koa/router')
 const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
+// P1：SSR 表单也走 zod 校验；写操作按"表名 + 动作"声明 RBAC 权限
+const { z, validatePageBody } = require('../../utils/validate')
+const { requirePermissionPageByTable } = require('../../middleware/rbac')
+
+// ⚠️ 不写 .default()：未提交的字段语义是"不修改"，给默认值会把编辑时没动的字段重置
+const cateSchema = z.object({
+  title: z.string({ error: '分类名称必填' }).trim().min(1, '分类名称必填').max(100),
+  pid: z.string().trim().max(64).optional(), // '0' 表示一级分类
+  keywords: z.string().max(255).optional(),
+  description: z.string().optional(),
+  status: z.coerce.number().int().min(0).max(1).optional()
+})
 router.get('/', async (ctx) => {
   // 一旦打印出promise，肯定是少加了await
   let result = await DB.find('articlecate', {});
@@ -19,7 +31,7 @@ router.get('/add', async (ctx) => {
     catelist: result
   })
 })
-router.post('/doAdd', async (ctx) => {
+router.post('/doAdd', requirePermissionPageByTable('articlecate', 'create'), validatePageBody(cateSchema, '/admin/articlecate/add'), async (ctx) => {
   // console.log(ctx.request.body)
   let addData = ctx.request.body
   let result = await DB.insert('articlecate', addData)
@@ -37,7 +49,7 @@ router.get('/edit', async (ctx) => {
     catelist: articlecate
   });
 })
-router.post('/doEdit', async (ctx) => {
+router.post('/doEdit', requirePermissionPageByTable('articlecate', 'update'), validatePageBody(cateSchema, (ctx) => `/admin/articlecate/edit?id=${ctx.request.body.id || ''}`), async (ctx) => {
   // console.log(ctx.request.body)
   let editData = ctx.request.body
   let id = editData.id /*前台设置隐藏表单域传过来*/

@@ -106,3 +106,64 @@ CREATE TABLE IF NOT EXISTS setting (
   site_status     smallint     NOT NULL DEFAULT 1,
   add_time        timestamptz  NOT NULL DEFAULT now()
 );
+
+-- ---------------- RBAC：角色（P1） ----------------
+-- 设计取舍：一个管理员一个角色（admin.role_id），够 CMS 用且实现清晰；
+-- 若将来要"一人多角色"，只需把 admin.role_id 换成 admin_role 中间表（多对多），其余代码不变。
+CREATE TABLE IF NOT EXISTS role (
+  _id         text PRIMARY KEY DEFAULT gen_oid(),
+  code        varchar(50)  NOT NULL UNIQUE,   -- 角色标识，代码里用它判断，如 super_admin
+  name        varchar(50)  NOT NULL,          -- 角色名，界面上显示，如 超级管理员
+  description varchar(255),
+  status      smallint     NOT NULL DEFAULT 1,
+  add_time    timestamptz  NOT NULL DEFAULT now()
+);
+
+-- ---------------- RBAC：权限点（P1） ----------------
+-- 权限点命名统一为 "资源:动作"（如 article:delete），便于中间件直接拼串校验。
+-- 注意列名用 grp 而不是 group —— group 是 SQL 保留字，直接写会报语法错误。
+CREATE TABLE IF NOT EXISTS permission (
+  _id      text PRIMARY KEY DEFAULT gen_oid(),
+  code     varchar(80) NOT NULL UNIQUE,          -- 权限点，如 article:create
+  name     varchar(80) NOT NULL,                 -- 中文名，如 新增文章
+  grp      varchar(50) NOT NULL DEFAULT 'default', -- 分组（前端按组渲染权限树）
+  sort     integer     NOT NULL DEFAULT 0,
+  add_time timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_permission_grp ON permission (grp, sort);
+
+-- ---------------- RBAC：角色-权限（多对多） ----------------
+-- ⚠️ 教学点：这里**故意不加物理外键**，与项目其他表保持一致（Mongo 迁移遗留的"逻辑关联"风格）。
+-- 代价是删除角色时数据库不会帮你清理关联行，必须自己在事务里先删 role_permission 再删 role ——
+-- 这正是"有外键 vs 无外键"最直观的对比场景（见 docs/database-sql.md 与 services/rbacService.removeRole）。
+CREATE TABLE IF NOT EXISTS role_permission (
+  _id           text PRIMARY KEY DEFAULT gen_oid(),
+  role_id       text NOT NULL,
+  permission_id text NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_role_permission ON role_permission (role_id, permission_id);
+CREATE INDEX IF NOT EXISTS idx_role_permission_role ON role_permission (role_id);
+
+-- ---------------- 操作审计日志（P1） ----------------
+CREATE TABLE IF NOT EXISTS audit_log (
+  _id         text PRIMARY KEY DEFAULT gen_oid(),
+  admin_id    text,
+  admin_name  varchar(50),
+  action      varchar(20)  NOT NULL,        -- create / update / delete / other
+  resource    varchar(50),                  -- 资源名，如 article
+  resource_id text,                         -- 目标记录 _id
+  method      varchar(10),                  -- HTTP 方法
+  path        varchar(255),                 -- 请求路径（查问题时最好用）
+  status      smallint     NOT NULL DEFAULT 200,
+  ip          varchar(64),
+  detail      jsonb,                        -- 变更内容快照（已脱敏，password 类字段不入库）
+  created_at  timestamptz  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created  ON audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_admin    ON audit_log (admin_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_log (resource, resource_id);
+
+-- ---------------- 管理员表补充 role_id（RBAC） ----------------
+-- 已有库不会因为 CREATE TABLE IF NOT EXISTS 而新增列，所以这里显式 ALTER（幂等）
+ALTER TABLE admin ADD COLUMN IF NOT EXISTS role_id text;
+CREATE INDEX IF NOT EXISTS idx_admin_role ON admin (role_id);

@@ -80,6 +80,7 @@
 										<div class="space-6"></div>
 
 										<form action="{{__HOST__}}/admin/login/doLogin" method="POST" id='loginForm'>
+										<input type="hidden" name="_csrf" value="{{csrfToken}}" />
 											<fieldset>
 												<label class="block clearfix">
 													<span class="block input-icon input-icon-right">

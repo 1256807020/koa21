@@ -15,7 +15,34 @@ const dayjs = require('dayjs')
 const config = require('./config')
 
 // 允许上传的图片后缀白名单
-const ALLOWED_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']
+// 注意：刻意**不含 .svg**——SVG 是 XML 可内嵌 <script>，是著名的 XSS 载体；
+// 即便后续放开，也必须配合 Content-Type 强制 + nosniff（见 app.js 静态资源头）才勉强可用。
+const ALLOWED_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']
+
+// 后缀 → 期望的 MIME（双重校验：扩展名可被改名绕过，MIME 由浏览器/客户端按内容给出，
+// 二者同时命中才放行，大幅降低「把 .html 改名 .png 上传」这类绕过）
+const ALLOWED_MIME = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp'
+}
+
+// 上传类型白名单（P0 安全）：multer 在接收流之前调用，同时校验「扩展名 + MIME」。
+// 抽成模块级函数并导出，便于单元测试（见 _verify.js），也让逻辑与 multer 实例解耦。
+// cb(err, false) 表示拒绝；cb(null, true) 表示接受。
+function uploadFileFilter (req, file, cb) {
+  const ext = path.extname(file.originalname || '').toLowerCase()
+  const expectMime = ALLOWED_MIME[ext]
+  const ok = ALLOWED_EXT.includes(ext) && expectMime && expectMime === file.mimetype
+  if (!ok) {
+    cb(new Error(`不支持的文件类型：${ext || '未知'} (${file.mimetype || '无 MIME'})`), false)
+    return
+  }
+  cb(null, true)
+}
 
 function ensureUploadDir () {
   fs.mkdirSync(config.upload.dirAbs, { recursive: true })
@@ -47,7 +74,7 @@ const tools = {
       }
     })
 
-    const instance = multer({ storage, limits: { fileSize: config.upload.maxSize } })
+    const instance = multer({ storage, fileFilter: uploadFileFilter, limits: { fileSize: config.upload.maxSize } })
 
     const bridge = (ctx) => {
       if (!ctx || !ctx.req) return ctx
@@ -134,3 +161,4 @@ const tools = {
 }
 
 module.exports = tools
+module.exports.uploadFileFilter = uploadFileFilter

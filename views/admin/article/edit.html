@@ -55,6 +55,7 @@
 					<div class="table-responsive">
 						<form action="{{__HOST__}}/admin/article/doEdit" method="post" class="form-horizontal" role="form" enctype="multipart/form-data"
 						 style="border:1px solid #eee;">
+							<input type="hidden" name="_csrf" value="{{csrfToken}}" />
 							<ul id="myTab" class="nav nav-tabs" style="height:44px;">
 								<li class="active">
 									<a href="#basic" data-toggle="tab">

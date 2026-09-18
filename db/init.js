@@ -13,7 +13,10 @@ const { Client } = require('pg')
 const config = require('../model/config')
 
 const DB_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
-const TABLES = ['admin', 'articlecate', 'article', 'nav', 'focus', 'link', 'setting']
+const TABLES = [
+  'admin', 'articlecate', 'article', 'nav', 'focus', 'link', 'setting',
+  'role', 'permission', 'role_permission', 'audit_log'
+]
 
 async function main () {
   const reset = process.argv.includes('--reset')

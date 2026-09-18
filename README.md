@@ -21,7 +21,7 @@
 | 数据库 | PostgreSQL 18（驱动 `pg`） |
 | 静态服务 | koa-static |
 | 跨域 | @koa/cors（仅对 `/api` 开放） |
-| 鉴权/安全 | bcryptjs（密码哈希）、svg-captcha（登录验证码） |
+| 鉴权/安全 | bcryptjs（密码哈希）、svg-captcha（登录验证码）、sanitize-html（富文本 XSS 净化） |
 | 上传 | @koa/multer + multer（本地磁盘 `public/upload`） |
 | 日志 | log4js |
 | 后台 UI | jQuery + Ace Admin 1.x 模板 |
@@ -119,38 +119,73 @@ pnpm dev          # 默认 http://localhost:3000
 
 | 表 | 用途 |
 |---|---|
-| `admin` | 管理员（username、password[bcrypt]、status、lasttime） |
+| `admin` | 管理员（username、password[bcrypt]、status、lasttime、**role_id**） |
 | `articlecate` | 内容分类（`pid='0'` 为一级） |
 | `article` | 文章（`_id`、title、content、pid、img_url、sort、status…） |
 | `nav` | 导航 |
 | `focus` | 轮播图 |
 | `link` | 友情链接 |
 | `setting` | 系统设置（单行） |
+| `role` | **RBAC 角色**（code/name/description/status） |
+| `permission` | **RBAC 权限点**（`code` 形如 `article:delete`，`grp` 分组） |
+| `role_permission` | **角色-权限映射**（多对多，故意不加物理外键） |
+| `audit_log` | **操作审计**（admin_id/action/resource/detail(已脱敏)/ip/created_at） |
 
 主键统一为 `_id`（`text`，24 位十六进制，`gen_oid()` 生成），兼容原 Mongo 写法。
+内置角色：`super_admin`（全部 33 个权限点）/ `editor`（内容管理 22 个）/ `viewer`（只读 6 个）。
 
 ## 九、API 概览
 
-**前台公开接口（JSON，`/api/*`，CORS 开放）**
+> 正式版本统一用 **`/api/v1`**；`/api` 为兼容旧路径保留（deprecated）。
+> **交互式文档：`GET /api/v1/docs`（Swagger UI）；规范 JSON：`GET /api/v1/openapi.json`（从 zod schema 自动生成）。**
+
+**公开内容接口（无需登录，供前台 / SSG 构建期读取）**
 
 | 接口 | 方法 | 说明 |
 |---|---|---|
-| `/api/catelist` | GET | 分类列表 |
-| `/api/newslist` | GET | 新闻列表（支持分页/分类） |
-| `/api/addCart` | POST | 示例写接口 |
-| `/api/editPeopleInfo` | PUT | 示例写接口 |
-| `/api/deleteCart` | DELETE | 示例写接口 |
+| `/api/v1/public/settings` | GET | 站点设置 |
+| `/api/v1/public/nav` | GET | 导航 |
+| `/api/v1/public/focus` | GET | 首页轮播 |
+| `/api/v1/public/links` | GET | 友情链接 |
+| `/api/v1/public/categories` | GET | 分类树（**递归 CTE**，任意层级嵌套） |
+| `/api/v1/public/articles` | GET | 文章列表（分页 / `cateId` 含子孙分类 / `keyword`；**不含 content**） |
+| `/api/v1/public/articles/:id` | GET | 文章详情 + 上下篇（**窗口函数 LAG/LEAD**） |
+| `/api/v1/catelist`、`/api/v1/newslist` | GET | 旧公开接口（保留兼容） |
 
-**后台接口（服务端渲染，非 JSON）**
+**后台接口（需登录 + CSRF；写操作还需权限点）**
 
-后台管理目前是**传统服务端渲染**：列表页 `GET /admin/:module`，表单页 `GET /admin/:module/add`、`/edit`，提交 `POST /admin/:module/doAdd`、`/doEdit`，返回页面或重定向。**后台暂未提供 JSON CRUD 接口**（见改造计划 P0）。
+| 接口 | 方法 | 权限点 |
+|---|---|---|
+| `/api/v1/admin/:resource/list`、`/:id` | GET | `{resource}:list` |
+| `/api/v1/admin/:resource/add` | POST | `{resource}:create` |
+| `/api/v1/admin/:resource/:id/edit` | POST | `{resource}:update` |
+| `/api/v1/admin/:resource/:id/delete` | POST | `{resource}:delete` |
+| `/api/v1/admin/rbac/me` | GET | 登录即可（返回自己的权限点，供前端渲染菜单） |
+| `/api/v1/admin/rbac/roles`、`/permissions` | GET | `role:list` |
+| `/api/v1/admin/rbac/roles/:roleId/permissions` | GET / POST | `role:list` / `role:assign` |
+| `/api/v1/admin/audit/list` | GET | `audit:list` |
+| `/api/v1/csrf-token` | GET | 签发 CSRF token（双提交 Cookie） |
+
+`resource` 当前支持 `manage`（=管理员表 `admin`）与 `article`。
+
+**系统**
+
+| 接口 | 方法 | 说明 |
+|---|---|---|
+| `/healthz` | GET | 健康检查（查 DB，返回 status/env/uptime/latencyMs；不鉴权、不限流） |
+
+**后台页面（传统服务端渲染，保留兼容）**
+
+列表页 `GET /admin/:module`，表单页 `/add`、`/edit`，提交 `POST /admin/:module/doAdd`、`/doEdit`。
+这些表单同样受**登录守卫 + CSRF + RBAC 权限点 + zod 校验**保护（见 `routes/admin/*.js`）。
 
 ## 十、部署建议
 
 - **进程管理**：生产用 `pm2`（cluster 模式）或 `docker`，不要裸 `node`。
 - **反向代理**：Nginx 前置，设 `TRUST_PROXY=true`，SSL 终止在 Nginx，Cookie `secure`。
 - **静态资源 / 上传**：当前上传存本地 `public/upload`；多实例/对象存储场景应迁移到 OSS/S3。
-- **健康检查**：建议补充 `GET /healthz` 探测 DB 连通性。
+- **健康检查**：已提供 `GET /healthz`（探活只查 DB）。
+- **限流**：`middleware/rateLimit.js` 按 IP 限流（只罩 `/api` 与 `/admin`）；**多实例部署需把存储换成 Redis**，否则限额会被放大 N 倍。
 
 ## 十一、安全现状
 
@@ -172,33 +207,33 @@ pnpm dev          # 默认 http://localhost:3000
 
 ### P0 — 安全（上线前必修）
 
-- [ ] **删除接口重构**：去掉 `collectionName` 表名参数，改为 `POST /api/admin/:resource/:id/delete`，加权限校验 + CSRF token。
-- [ ] **全站 CSRF 防护**：引入 `koa-csrf` 或双提交 Cookie 方案，覆盖所有写操作。
-- [ ] **上传文件类型白名单**：`tools.multer()` 增加 `fileFilter`，仅允许图片类（png/jpg/gif/webp）。
-- [ ] **前台富文本 XSS 净化**：`content.html` 的 `{{@list.content}}` 服务端经 `sanitize-html` / DOMPurify 净化后再输出。
-- [ ] **清理验证码明文日志**：删除 `routes/admin/login.js` 中的 `console.log(captcha.text)`；生产 `COOKIE_SECURE=1`。
-- [ ] **登录限流与锁定**：引入 `koa-ratelimit` 或失败计数锁定，降低爆破风险。
+- [x] **删除接口重构**：去掉 `collectionName` 表名参数，改为 `POST /api/admin/:resource/:id/delete`，加权限校验 + CSRF token。
+- [x] **全站 CSRF 防护**：引入 `koa-csrf` 或双提交 Cookie 方案，覆盖所有写操作。（JSON API 已覆盖；SSR 表单待补）
+- [x] **上传文件类型白名单**：`tools.multer()` 增加 `fileFilter`，仅允许图片类（png/jpg/gif/webp）。
+- [x] **前台富文本 XSS 净化**：`content.html` 的 `{{@list.content}}` 服务端经 `sanitize-html` / DOMPurify 净化后再输出。
+- [x] **清理验证码明文日志**：删除 `routes/admin/login.js` 中的 `console.log(captcha.text)`；生产 `COOKIE_SECURE=1`。
+- [x] **登录限流与锁定**：引入 `koa-ratelimit` 或失败计数锁定，降低爆破风险。
 
 ### P0 — 升级后台框架的前置
 
-- [ ] **后台 CRUD 补 JSON API**：在 `routes/admin/*` 之上新增 `/api/admin/*` 返回 `{ code, message, data }` 统一结构（增删改查 + 分页 + 校验）。这是换 Vue3/React 后台模板的底座。
+- [x] **后台 CRUD 补 JSON API**：在 `routes/admin/*` 之上新增 `/api/admin/*` 返回 `{ code, message, data }` 统一结构（增删改查 + 分页 + 校验）。这是换 Vue3/React 后台模板的底座。
 
 ### P1 — 质量与权限
 
-- [ ] **RBAC**：角色 + 权限点，替换当前"仅登录态"判断（`routes/admin.js` 的 `ctx.session.userinfo`）。
-- [ ] **操作审计日志**：记录谁、何时、改了什么。
-- [ ] **统一响应体与错误码**：前台/后台统一 `{ code, message, data }` 规范，定义错误码表。
-- [ ] **统一输入校验层**：引入 zod/joi，替换散落在各路由的正则校验。
-- [ ] **API 版本化**：`/api/v1` 前缀，便于后续不兼容升级。
+- [x] **RBAC**：角色 + 权限点，替换当前"仅登录态"判断（`routes/admin.js` 的 `ctx.session.userinfo`）。
+- [x] **操作审计日志**：记录谁、何时、改了什么。
+- [x] **统一响应体与错误码**：前台/后台统一 `{ code, message, data }` 规范，定义错误码表。（含修掉全局 500/404 返回旧风格 `{success:false}` 与 HTML 的不一致）
+- [x] **统一输入校验层**：引入 zod/joi，替换散落在各路由的正则校验。（JSON API 用 `utils/schemas.js`；SSR 表单用 `validatePageBody` 中间件全覆盖）
+- [x] **API 版本化**：`/api/v1` 前缀，便于后续不兼容升级。（同一套路由双挂 `/api/v1` + `/api`）
 
 ### P2 — SEO / 部署 / 工程化
 
 - [ ] **SEO 增强**：`sitemap.xml`、`robots.txt`、每页 `meta description` / Open Graph、结构化数据（JSON-LD）。
 - [ ] **部署工程化**：`Dockerfile` + `pm2` cluster + CI/CD + Nginx 示例配置。
 - [ ] **上传上云**：迁移到 OSS / S3 / 七牛，解耦本地磁盘。
-- [ ] **可观测性**：`/healthz` 健康检查 + 全局限流中间件。
-- [ ] **API 文档**：Swagger / OpenAPI 自动生成。
-- [ ] **测试套件**：vitest 单元 + 接口测试（当前无测试）。
+- [x] **可观测性**：`/healthz` 健康检查 + 全局限流中间件。（`middleware/rateLimit.js` 按 IP 限流，只罩 /api 与 /admin；`/healthz` 查 DB 返回 status/uptime/latency）
+- [x] **API 文档**：Swagger / OpenAPI 自动生成。（`utils/schemas.js` 单一来源 → `utils/openapi.js` 用 `z.toJSONSchema()` 生成；`GET /api/v1/docs`）
+- [x] **测试套件**：单元 + 接口测试。（用 Node 内置 `node:test` 替代 vitest：环境装不上依赖，且零依赖更轻；`pnpm test`，26 项全绿）
 - [ ] **富文本编辑器替换**：ueditor 已停止维护，迁移到 wangEditor / TipTap。
 
 ## 十三、已知问题
@@ -216,6 +251,10 @@ pnpm dev          # 默认 http://localhost:3000
 > **"外键 vs 无外键 / ORM vs 手写 SQL"的架构师解惑**，见独立文档
 > **[docs/database-sql.md](docs/database-sql.md)**。
 > 面向"会用 TypeORM/Prisma 但 SQL 内功弱"的前端转全栈同学，所有示例可在库中直接运行。
+>
+> 前端**将来用什么框架、怎么迁移、哪些目录可以删**，见独立文档
+> **[docs/frontend-architecture.md](docs/frontend-architecture.md)**（Next.js / Nuxt / Astro 选型对比、
+> 目标架构、分阶段路线，以及 `views` `public` 逐目录的替换范围界定）。
 
 ---
 
@@ -233,41 +272,53 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] 项目 README（技术栈/快速开始/配置/API/部署/安全现状）
 - [x] 架构评审：服务端/接口/权限/安全/SEO/部署/规范全维度（见第十二章 Roadmap）
 - [x] SQL 实战文档 `docs/database-sql.md`（表关联/多对多/实战 SQL/架构师解惑）
+- [x] 前端架构演进方案 `docs/frontend-architecture.md`（Next.js/Nuxt/Astro 选型 + 替换范围逐目录界定 + 分阶段路线 + §9 九条方案清单供比较）
+- [x] 后端批次（接口规范 + 可观测性）：API 版本化 `/api/v1`、统一响应体固化、session 瘦身、`/healthz`、全局限流、测试套件（`node:test` 26 项）
+- [x] 后端批次（权限与内容）：**RBAC**（role/permission/role_permission + 内置三角色 + `requirePermission` 中间件）、**操作审计日志**（audit_log + 埋点 + 脱敏 + 查询接口）、**`/api/v1/public/*` 公开内容 API**、**zod 覆盖 SSR 表单**、**OpenAPI 自动生成**；测试套件扩到 **42 项**
 
 ### 待办 — P0 安全（上线前必修）
-- [ ] 删除接口重构：`GET /admin/remove?collectionName=表&id=` → `POST /api/admin/:resource/:id/delete`（+权限+CSRF）【未开始】
-- [ ] 全站 CSRF 防护（koa-csrf 或双提交 Cookie）【未开始】
-- [ ] 上传文件类型白名单（`tools.multer` fileFilter，仅图片）【未开始】
-- [ ] 前台富文本 XSS 净化（`content.html` `{{@content}}` → sanitize-html）【未开始】
-- [ ] 删 `login.js` 验证码明文 `console.log` + 生产 `COOKIE_SECURE=1`【未开始】
-- [ ] 登录失败限流/锁定（koa-ratelimit）【未开始】
+- [x] 删除接口重构：`GET /admin/remove?collectionName=表&id=` → `POST /api/admin/:resource/:id/delete`（已落地：真正调用 `DB.remove`、参数化防注入；CSRF token 已补，权限校验见 P1 RBAC）【已完成 endpoint + CSRF】
+- [x] 后台 JSON API 登录态守卫：`middleware/guard.js` 的 `requireLogin` 校验 `session.userinfo`，未登录→401（`{code:1002}`）【已完成】
+- [x] 后台 JSON API CSRF 防护（双提交 Cookie）：`middleware/guard.js` 的 `csrfGuard` 覆盖写请求，缺/错 token→403（`{code:1007}`）；`GET /api/csrf-token` 签发 token 并种可读 Cookie【已完成】
+- [x] SSR 后台表单 CSRF：`csrfGuardPage` + `ensureCsrfToken`，模板埋隐藏域 `name="_csrf"`；路由级「默认保护 + 例外显式」；multipart 表单在 multer 之后校验（`body` 未解析的坑）【已完成，18 项断言全绿】
+- [x] **彻底干掉旧危险 SSR 写端点**：`GET /admin/remove|changeStatus|changeSort`（表名/列名来自 URL、无白名单、GET 可被跨站触发）→ 全部改 `POST` + CSRF + 表名/字段白名单【已完成，旧 GET 已 405】
+- [x] 上传文件类型白名单：`tools.uploadFileFilter` 同时校验「扩展名 + MIME」，白名单移除 `.svg`；`app.js` 静态资源加 `X-Content-Type-Options: nosniff`【已完成，单测 5 例全绿】
+- [x] 前台富文本 XSS 净化：`utils/sanitize.js`（sanitize-html 白名单），覆盖 SSR `doAdd/doEdit` 与 `articleService.create/update` 两条入库路径【已完成】
+- [x] 删 `login.js` 验证码明文 `console.log` + 生产 `COOKIE_SECURE=true`【已完成】
+- [x] 登录失败限流/锁定：`middleware/loginRateLimit.js`，同账号 15 分钟内失败 5 次锁定 15 分钟【已完成，单测通过】
+- [x] **管理员接口字段泄露**：`adminService` 原用 `SELECT *` 把 `password`（bcrypt 哈希）返回给调用方，已加字段白名单 `_id/username/status/lasttime` + `safe()` 过滤【已完成，验证通过】
 
 ### 待办 — P0 升级前置（与框架无关，先建底座）
-- [ ] 后台 CRUD 补 JSON API（`/api/admin/*` 统一 `{code,message,data}`）【未开始】
+- [x] 后台 CRUD 补 JSON API（`/api/admin/*` 统一 `{code,message,data}`：utils 响应/错误码/zod 三层 + services 层 + 文章 `LEFT JOIN` 消灭 N+1）【已完成，端到端 curl 全绿】
 
 ### 待办 — P1 质量 / 权限
-- [ ] RBAC（角色/权限点，替换纯登录态判断）【未开始】
-- [ ] 操作审计日志【未开始】
-- [ ] 统一响应体 + 错误码规范【未开始】
-- [ ] 统一输入校验层（zod/joi）【未开始】
-- [ ] API 版本化 `/api/v1`【未开始】
+- [x] **RBAC**（角色/权限点，替换纯登录态判断）：新增 `role` / `permission` / `role_permission` 表 + 内置三角色（super_admin 33 / editor 22 / viewer 6 个权限点）；`middleware/rbac.js` 的 `requirePermission` / `requirePermissionByResource` / `requirePermissionPageByTable`；API 与 SSR 写端点全覆盖；`GET /api/v1/admin/rbac/me` 供前端渲染菜单【已完成，端到端 403 拦截已验证】
+- [x] session 瘦身：`ctx.session.userinfo` 原存整行 admin（含 password 哈希），改为只存 `{ _id, username, status, role_id }`【已完成，已验证解码会话无 password】
+- [x] **操作审计日志**：新增 `audit_log` 表 + `middleware/auditLog.js` 写操作埋点（业务成功后落库）+ `GET /api/v1/admin/audit/list` 查询（需 `audit:list`）；**入库前脱敏**（password/token→`[REDACTED]`）、超长正文截断【已完成，已验证脱敏与记录完整性】
+- [x] 统一响应体 + 错误码规范：修掉全局 500/404 对 `/api` 返回旧风格 `{success:false}` 与 HTML 片段的不一致，API 一律走 `fail()`；`handle` 抽到 `utils/handle.js` 共用【已完成】
+- [x] **统一输入校验层（zod）**：JSON API 用 `utils/schemas.js`（单一来源）；SSR 表单用 `validatePageBody` 中间件覆盖 `routes/admin/*` 全部 13 个 doAdd/doEdit【已完成】
+- [x] API 版本化 `/api/v1`：`routes/api.js` 去掉内部 prefix，同一套路由双挂 `/api/v1` + `/api`【已完成】
+
+### 待办 — 前端分离前置（公开内容 API）
+- [x] `/api/v1/public/*` 公开只读内容 API：settings / nav / focus / links / categories（递归 CTE）/ articles（分页+分类含子孙+关键词）/ articles/:id（详情+上下篇窗口函数）；统一 `{code,message,data}` + `Cache-Control` + 字段白名单【已完成】
 
 ### 待办 — P2 SEO / 部署 / 工程化
-- [ ] SEO 增强（sitemap.xml / robots.txt / meta / OG / JSON-LD）【未开始】
-- [ ] Dockerfile + pm2 cluster + CI/CD + nginx 示例【未开始】
-- [ ] 上传上对象存储（OSS/S3）【未开始】
-- [ ] healthz 健康检查 + 全局限流【未开始】
-- [ ] Swagger / OpenAPI 文档【未开始】
-- [ ] 测试套件（vitest）【未开始】
+- [ ] SEO 增强（sitemap.xml / robots.txt / meta / OG / JSON-LD）【未开始】待前端方案确定后做
+- [ ] Dockerfile + pm2 cluster + CI/CD + nginx 示例【未开始】暂不做，准备部署时再做
+- [ ] 上传上对象存储（OSS/S3）【未开始】暂不做，上传走本地
+- [x] healthz 健康检查 + 全局限流：`/healthz`（查 DB，返回 status/env/uptime/latency）+ `middleware/rateLimit.js`（按 IP，只罩 /api 与 /admin，静态与 healthz 豁免）【已完成】
+- [x] **Swagger / OpenAPI（自动生成）**：请求 schema 只在 `utils/schemas.js` 定义一份，路由用它校验、`utils/openapi.js` 用 `z.toJSONSchema()` 转成 OpenAPI 3.1；`GET /api/v1/openapi.json` + `GET /api/v1/docs`（Swagger UI）【已完成，19 条路径自动生成】
+- [x] 测试套件：用 **Node 内置 `node:test`**（零依赖）替代 vitest，`pnpm test` 共 **42 项全绿**（响应体/错误码、zod、XSS 净化、上传白名单、两个限流器、**审计脱敏、handle 映射、RBAC 兜底、OpenAPI 生成**）【已完成】
 - [ ] 替换 ueditor → wangEditor / TipTap【未开始】
 
 ### 待办 — SQL 教学化（贯穿各批次，把基础/进阶/高级用上）
-- [ ] 后台列表 JOIN 替代冗余 catename + 消灭 N+1【随 P0 JSON API】
-- [ ] 树形分类 `WITH RECURSIVE` 递归 CTE【P0/P1】
-- [ ] 统计报表 `GROUP BY` + 窗口函数 `ROW_NUMBER()`【P1】
-- [ ] 分页 / 模糊搜索 / 事务 / `EXPLAIN` 实战样例（代码注释 + 文档）【持续】
-- [ ] 物理外键 + 级联删除（教学对比，可选）【P2 可选】
-- [ ] 多对多中间表（标签功能 demo）【P2 教学】
+- [x] 后台列表 JOIN 替代冗余 catename + 消灭 N+1（`services/articleService.list` 用 `LEFT JOIN articlecate` 取 `cate_name`）【已完成】
+- [x] 树形分类 `WITH RECURSIVE` 递归 CTE：`contentService.getCategoryTree()` 一次查出整棵树；`listArticles({cateId})` 用递归子树实现"含所有子孙分类"的筛选【已完成】
+- [ ] 统计报表 `GROUP BY` + 窗口函数 `ROW_NUMBER()`【部分完成】已用窗口函数 `LAG/LEAD` 取文章上下篇（`contentService.getArticle`）；`GROUP BY` 统计报表与 `ROW_NUMBER()` 排名待做
+- [x] 分页 / 模糊搜索 / **事务** 实战样例：【已完成】分页与 `ILIKE` 模糊搜索见 `contentService`、`articleService`；事务见 `rbacService.setRolePermissions`（清空+写入原子化）与 `removeRole`（删关联+删角色原子化）
+- [x] 物理外键 + 级联删除（教学对比）：`role_permission` **故意不加外键**，导致删角色必须自己在事务里先删关联行——这正是"有外键 vs 无外键"的活教材（见 `rbacService.removeRole` 注释与 `docs/database-sql.md`）【已完成（教学对比）】
+- [x] 多对多中间表：`role_permission`（角色 ↔ 权限点）就是标准多对多中间表实现，含唯一索引防重复授权【已完成】
+- [ ] `EXPLAIN` 执行计划分析样例（代码注释 + 文档）【持续】
 
 ---
 

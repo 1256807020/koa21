@@ -7,6 +7,7 @@
 // ============================================================
 const DB = require('../model/db')
 const code = require('../utils/code')
+const { sanitizeArticle } = require('../utils/sanitize')
 
 const TABLE = 'article'
 
@@ -63,7 +64,7 @@ async function create ({ title, author, pid, content, status = 1 }) {
     title,
     author: author || '',
     pid: pid || '',
-    content: content || '',
+    content: sanitizeArticle(content), // P0 安全：入库前净化富文本，防存储型 XSS
     status,
     add_time: new Date()
   })
@@ -72,6 +73,10 @@ async function create ({ title, author, pid, content, status = 1 }) {
 
 /** 编辑 */
 async function update (id, data) {
+  // 仅当本次提交了 content 才净化（部分更新不应把已有正文清空/污染）
+  if (data && typeof data.content === 'string') {
+    data.content = sanitizeArticle(data.content)
+  }
   const { rowCount, rows } = await DB.update(TABLE, { _id: DB.getObjectId(id) }, data)
   if (!rowCount) {
     const e = new Error('文章不存在')

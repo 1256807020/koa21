@@ -98,3 +98,98 @@ ON CONFLICT (_id) DO NOTHING;
 INSERT INTO admin (_id, username, password, status, lasttime)
 VALUES ('5bdaf166e67d082570b10f01', 'admin', '$2b$10$4TRXi.k0ZvP8/IyWfRXf3.5uRhNmtmZLSmdQSe1ntCK/5sXygArGq', 1, NULL)
 ON CONFLICT (username) DO NOTHING;
+
+-- ============================================================
+-- RBAC（角色 / 权限点 / 角色-权限）
+-- 幂等策略：角色与权限点用 ON CONFLICT (code) DO NOTHING；
+--           映射表用 "NOT EXISTS" 判断，避免重复插入（因为映射没有业务唯一键可用作 ON CONFLICT 目标之外的写法）
+-- ============================================================
+
+-- ---------------- 角色 ----------------
+INSERT INTO role (code, name, description, status) VALUES
+  ('super_admin', '超级管理员', '拥有系统全部权限', 1),
+  ('editor',      '内容编辑',   '可管理文章、分类、导航、轮播与友链', 1),
+  ('viewer',      '只读运营',   '只能查看，不能做任何修改', 1)
+ON CONFLICT (code) DO NOTHING;
+
+-- ---------------- 权限点（命名统一为 "资源:动作"） ----------------
+-- grp 用于前端按分组渲染权限树：sys=系统管理 / content=内容管理 / site=站点配置
+INSERT INTO permission (code, name, grp, sort) VALUES
+  ('manage:list',      '查看管理员',   'sys', 1),
+  ('manage:create',    '新增管理员',   'sys', 2),
+  ('manage:update',    '编辑管理员',   'sys', 3),
+  ('manage:delete',    '删除管理员',   'sys', 4),
+  ('role:list',        '查看角色',     'sys', 5),
+  ('role:create',      '新增角色',     'sys', 6),
+  ('role:update',      '编辑角色',     'sys', 7),
+  ('role:delete',      '删除角色',     'sys', 8),
+  ('role:assign',      '分配角色权限', 'sys', 9),
+  ('audit:list',       '查看审计日志', 'sys', 10),
+  ('article:list',     '查看文章',     'content', 11),
+  ('article:create',   '新增文章',     'content', 12),
+  ('article:update',   '编辑文章',     'content', 13),
+  ('article:delete',   '删除文章',     'content', 14),
+  ('articlecate:list',   '查看分类',   'content', 15),
+  ('articlecate:create', '新增分类',   'content', 16),
+  ('articlecate:update', '编辑分类',   'content', 17),
+  ('articlecate:delete', '删除分类',   'content', 18),
+  ('nav:list',         '查看导航',     'content', 19),
+  ('nav:create',       '新增导航',     'content', 20),
+  ('nav:update',       '编辑导航',     'content', 21),
+  ('nav:delete',       '删除导航',     'content', 22),
+  ('focus:list',       '查看轮播图',   'content', 23),
+  ('focus:create',     '新增轮播图',   'content', 24),
+  ('focus:update',     '编辑轮播图',   'content', 25),
+  ('focus:delete',     '删除轮播图',   'content', 26),
+  ('link:list',        '查看友情链接', 'content', 27),
+  ('link:create',      '新增友情链接', 'content', 28),
+  ('link:update',      '编辑友情链接', 'content', 29),
+  ('link:delete',      '删除友情链接', 'content', 30),
+  ('setting:list',     '查看站点设置', 'site', 31),
+  ('setting:update',   '修改站点设置', 'site', 32),
+  ('upload:create',    '上传文件',     'site', 33)
+ON CONFLICT (code) DO NOTHING;
+
+-- ---------------- 角色-权限映射 ----------------
+-- 超级管理员：全部权限（用显式映射而不是"代码里判断 admin 就是超级管理员"，
+-- 好处是权限完全由数据决定，将来加角色不用改代码）
+INSERT INTO role_permission (role_id, permission_id)
+SELECT r._id, p._id
+  FROM role r
+ CROSS JOIN permission p
+ WHERE r.code = 'super_admin'
+   AND NOT EXISTS (
+     SELECT 1 FROM role_permission rp WHERE rp.role_id = r._id AND rp.permission_id = p._id
+   );
+
+-- 内容编辑：内容管理组全部 + 查看站点设置 + 上传文件
+INSERT INTO role_permission (role_id, permission_id)
+SELECT r._id, p._id
+  FROM role r
+ CROSS JOIN permission p
+ WHERE r.code = 'editor'
+   AND (p.grp = 'content' OR p.code IN ('setting:list', 'upload:create'))
+   AND NOT EXISTS (
+     SELECT 1 FROM role_permission rp WHERE rp.role_id = r._id AND rp.permission_id = p._id
+   );
+
+-- 只读运营：仅"内容与站点设置"的查看权限（grp 非 sys）
+-- ⚠️ 这里有个真实的坑：最初写法是"所有以 :list 结尾的权限"，但 audit:list / role:list / manage:list
+--    也以 :list 结尾，结果只读运营竟能查看审计日志（越权读）。教训：**权限规则别只靠字符串后缀匹配**，
+--    要显式限定分组范围（这里用 grp <> 'sys' 把系统管理类排除）。
+INSERT INTO role_permission (role_id, permission_id)
+SELECT r._id, p._id
+  FROM role r
+ CROSS JOIN permission p
+ WHERE r.code = 'viewer'
+   AND p.code LIKE '%:list'
+   AND p.grp <> 'sys'
+   AND NOT EXISTS (
+     SELECT 1 FROM role_permission rp WHERE rp.role_id = r._id AND rp.permission_id = p._id
+   );
+
+-- ---------------- 管理员绑定角色 ----------------
+-- 存量管理员（含默认 admin）一律先给"超级管理员"，避免升级后登录进后台却没权限
+UPDATE admin
+   SET role_id = (SELECT _id FROM role WHERE code = 'super_admin')
+ WHERE role_id IS NULL;

@@ -3,6 +3,26 @@ const Router = require('@koa/router')
 const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
+const { sanitizeArticle } = require('../../utils/sanitize')
+// multipart 表单的 CSRF 校验必须放在 multer 之后（multer 解析完 body 才有 _csrf 字段）
+const { csrfGuardPage } = require('../../middleware/guard')
+const { z, validatePageBody } = require('../../utils/validate')
+const { requirePermissionPageByTable } = require('../../middleware/rbac')
+
+// 文章表单 schema（不加 .default()：未提交的字段保持"不修改"语义）
+const articleSchema = z.object({
+  title: z.string({ error: '标题必填' }).trim().min(1, '标题必填').max(255),
+  catename: z.string({ error: '分类名称必填' }).trim().min(1, '分类名称必填').max(100),
+  pid: z.string().trim().max(64).optional(),
+  author: z.string().trim().max(50).optional(),
+  keywords: z.string().max(255).optional(),
+  description: z.string().optional(),
+  content: z.string().optional(),
+  status: z.coerce.number().int().min(0).max(1).optional(),
+  is_best: z.coerce.number().int().min(0).max(1).optional(),
+  is_hot: z.coerce.number().int().min(0).max(1).optional(),
+  is_new: z.coerce.number().int().min(0).max(1).optional()
+})
 
 router.get('/', async (ctx) => {
   ctx.body = 'article'
@@ -45,7 +65,10 @@ router.get('/add', async (ctx) => {
 //post接收数据
 // 此处upload要与前面var upload = multer({ storage: storage });定义变量名一致；
 // pic要与add.html里图片上传部分的name id值一致
-router.post('/doAdd', tools.multer().single('img_url'), async (ctx) => {
+// 中间件顺序讲究（详见 docs/dev-notes.md）：
+//   ① 权限（只需 session，放最前）→ ② multer 解析（先卡权限可避免"未授权也把文件落盘"）
+//   → ③ CSRF（必须等 multer 解析出 body 才能读到 _csrf）→ ④ zod 校验 → ⑤ 业务
+router.post('/doAdd', requirePermissionPageByTable('article', 'create'), tools.multer().single('img_url'), csrfGuardPage, validatePageBody(articleSchema, '/admin/article/add'), async (ctx) => {
   // ctx.body = {
   //   filename: ctx.req.file ? ctx.req.file.filename : '',  //返回文件名
   //   body: ctx.req.body
@@ -61,7 +84,7 @@ router.post('/doAdd', tools.multer().single('img_url'), async (ctx) => {
   let is_new = ctx.req.body.is_new;
   let keywords = ctx.req.body.keywords;
   let description = ctx.req.body.description || '';
-  let content = ctx.req.body.content || '';
+  let content = sanitizeArticle(ctx.req.body.content); // P0 安全：入库前净化，防存储型 XSS
   let img_url = tools.imgUrl(ctx.req.file);
 
   let add_time = tools.getTime();
@@ -90,7 +113,7 @@ router.get('/edit', async (ctx) => {
   });
 })
 
-router.post('/doEdit', tools.multer().single('img_url'), async (ctx) => {
+router.post('/doEdit', requirePermissionPageByTable('article', 'update'), tools.multer().single('img_url'), csrfGuardPage, validatePageBody(articleSchema, (ctx) => `/admin/article/edit?id=${ctx.request.body.id || ''}`), async (ctx) => {
 
   let prevPage = ctx.req.body.prevPage || '';  /*上一页的地址*/
   let id = ctx.req.body.id;
@@ -105,7 +128,7 @@ router.post('/doEdit', tools.multer().single('img_url'), async (ctx) => {
   let is_new = ctx.req.body.is_new;
   let keywords = ctx.req.body.keywords;
   let description = ctx.req.body.description || '';
-  let content = ctx.req.body.content || '';
+  let content = sanitizeArticle(ctx.req.body.content); // P0 安全：入库前净化，防存储型 XSS
   let img_url = tools.imgUrl(ctx.req.file);
   //属性的简写
   //注意是否修改了图片          var           let块作用域

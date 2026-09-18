@@ -82,6 +82,13 @@ const config = {
   log: {
     level: str(process.env.LOG_LEVEL, NODE_ENV === 'production' ? 'warn' : 'debug'),
     dir: str(process.env.LOG_DIR, 'logs')
+  },
+
+  // 全局限流（按 IP 计算，见 middleware/rateLimit.js）
+  // 生产可按压测结果调大；多实例部署需把存储换成 Redis 后才准确
+  rateLimit: {
+    windowMs: num(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
+    max: num(process.env.RATE_LIMIT_MAX, 300)
   }
 }
 

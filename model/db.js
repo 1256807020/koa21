@@ -17,6 +17,7 @@
 const { Pool } = require('pg')
 const config = require('./config')
 const createLogger = require('./logger')
+const CODE = require('../utils/code')
 const { assertIdent, quoteIdent, buildWhere, buildSelect, buildOrder } = require('./mongo-sql')
 
 const log = createLogger('db')
@@ -230,11 +231,18 @@ class Db {
   /**
    * 兼容原 Mongoose/Mongo 的 ObjectID 用法
    * 现在只是把 id 规范成字符串并校验合法性（防注入、防脏参数）
+   *
+   * ⚠️ 关键：这里必须抛**带 .code 的业务错误**。
+   * 之前只抛普通 Error，上层统一错误处理认不出它是"参数错误"，
+   * 于是 `GET /api/v1/public/articles/@@@` 这种脏参数会返回 **500**（把客户端错误报成服务端故障，
+   * 既误导调用方，又会污染错误日志、触发无意义的告警）。现在统一为 PARAM_ERROR → HTTP 400。
    */
   getObjectId (id) {
     const value = String(id === undefined || id === null ? '' : id).trim()
     if (!/^[0-9A-Za-z_-]{1,64}$/.test(value)) {
-      throw new Error(`非法的 id 参数: ${value || '(空)'}`)
+      const err = new Error(`非法的 id 参数: ${value || '(空)'}`)
+      err.code = CODE.PARAM_ERROR
+      throw err
     }
     return value
   }
