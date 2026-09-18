@@ -1,0 +1,97 @@
+
+
+/** Colors **/
+:root {
+    /** Base Colors **/
+    --background:             var(--color-white);
+    --foreground:             var(--color-zinc-950);
+    --card:                   var(--color-white);
+    --card-foreground:        var(--color-zinc-950);
+    --popover:                var(--color-white);
+    --popover-foreground:     var(--color-zinc-950);
+    --primary:                var(--color-indigo-500);
+    --primary-foreground:     var(--color-white);
+    --secondary:              var(--color-zinc-100);
+    --secondary-foreground:   var(--color-zinc-900);
+    --muted:                  var(--color-zinc-100);
+    --muted-foreground:       var(--color-zinc-500);
+    --accent:                 var(--color-zinc-100);
+    --accent-foreground:      var(--color-zinc-900);
+    --destructive:            var(--color-red-600);
+    --destructive-foreground: var(--color-white);
+    --mono:                   var(--color-zinc-950);
+    --mono-foreground:        var(--color-white);
+  
+    /** Base Styles **/
+    --border:                 var(--color-zinc-200); /* Between two shades */
+    --input:                  var(--color-zinc-200);
+    --ring:                   var(--color-zinc-400);
+    --radius:                 0.4rem;
+}
+
+
+
+/** Theme Setup **/
+@theme inline {
+
+    /** Base Colors **/
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-mono: var(--mono);
+    --color-mono-foreground: var(--mono-foreground);
+
+    /** Base Styles **/
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --radius-xl: calc(var(--radius) + 4px);
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --default-font-family: Inter;
+
+    --font-body: "DM Sans", sans-serif;
+
+    --spacing-sidenav: 280px;
+    --spacing-topbar: 70px;
+
+    --color-default-50: var(--color-gray-50);
+    --color-default-100: var(--color-gray-100);
+    --color-default-150: var(--color-gray-150);
+    --color-default-200: var(--color-gray-200);
+    --color-default-300: var(--color-gray-300);
+    --color-default-400: var(--color-gray-400);
+    --color-default-500: var(--color-gray-500);
+    --color-default-600: var(--color-gray-600);
+    --color-default-700: var(--color-gray-700);
+    --color-default-800: var(--color-gray-800);
+    --color-default-900: var(--color-gray-900);
+    --color-default-950: var(--color-gray-950);
+
+    --shadow: 0 1px 2px 0 rgba(95, 74, 46, .08), 0 0 0 1px hsla(36, 8%, 88%, .4);
+    --rounded-box: 6px;
+}

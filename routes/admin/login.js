@@ -32,11 +32,21 @@ router.post('/doLogin', async (ctx) => {
     return await loginError(ctx, `尝试次数过多，账户已临时锁定，请 ${Math.ceil(lock.retryAfter / 60)} 分钟后再试`)
   }
 
-  // 1 先验证合法性（原代码在 session 里没有验证码时会直接抛错，这里做兜底）
-  // 2 再去数据库匹配
+  // —— 验证码：目前【只展示、不校验】——
+  // 决策（2026-09-19）：svg-captcha 暂时保留（登录页仍然渲染、/code 端点仍在），但**不做比对**，
+  // 后续会更换验证码方案（备选见 E:\360Data\FE_Note\验证码）。
+  //
+  // ⚠️ 安全说明（重要）：去掉验证码后，登录的**主要防护就是失败限流**
+  //    （middleware/loginRateLimit.js：同账号 15 分钟内失败 5 次 → 锁定 15 分钟）。
+  //    限流绝不能省 —— 没有验证码又没有限流，就等于允许纯爆破。
+  //
+  // 想重新启用校验：把下面的 VERIFY_CAPTCHA 改成 true 即可，校验逻辑完整保留。
+  const VERIFY_CAPTCHA = false
+
   const inputCode = String(code || '').trim().toLowerCase()
   const sessionCode = String(ctx.session.code || '').trim().toLowerCase()
-  if (sessionCode && inputCode === sessionCode) {
+  const captchaOk = !VERIFY_CAPTCHA || (sessionCode && inputCode === sessionCode)
+  if (captchaOk) {
     // 先按用户名查出用户（不再把密码拼进查询条件），再在应用层比对，
     // 这样既能兼容历史 md5，也能用 bcrypt 校验，且不泄露"用户是否存在"
     let result = await DB.find('admin', { 'username': username })

@@ -1,0 +1,51 @@
+/* ============================================================
+ * 后台（Console）样式入口 —— Tailwind CSS v4
+ *
+ * Tailwind v4 与 v3 的最大区别：**不再需要 tailwind.config.js**，
+ * 配置直接写在 CSS 里（CSS-first）：
+ *   @import "tailwindcss"  引入引擎
+ *   @source "..."          声明去哪里扫描 class（不写则只扫描入口所在目录）
+ *   @theme { ... }         定义设计令牌（替代 v3 的 theme.extend）
+ *
+ * 构建：
+ *   pnpm build:css
+ *   → 产出 public/console/css/app.css（静态资源，由 koa-static 提供）
+ *
+ * ⚠️ 这是「构建一次」的静态产物：改了模板里的 class 需要重新构建。
+ *    好处是运行时零开销、零 node_modules 依赖 —— 服务端只管渲染 HTML。
+ * ============================================================ */
+
+@import "tailwindcss";
+
+/* Skotwind 的设计令牌（拷贝自 skotwind/src/assets/css/theme.css）
+ * ⚠️ 必须放在 ktui 之前：ktui 的样式里用了 border-border / bg-background 这类工具类，
+ *    而它们的 --color-* 映射是在这个文件的 `@theme inline` 块里声明的。
+ *    少这一行会直接构建失败：Cannot apply unknown utility class `border-border`。
+ */
+@import "./theme.css";
+
+/* Skotwind 的组件库（kt-card / kt-btn / kt-input 等类来自这里） */
+@import "@keenthemes/ktui/styles.css";
+
+/* 扫描后台模板里的 class（路径相对于本文件） */
+@source "../../views/console/**/*.liquid";
+@source "../../views/console/**/*.html";
+@source "../../public/console/**/*.js";
+
+/* ---------------- 设计令牌（换主题只改这里） ----------------
+ * 对应 Skotwind 的 theme.css：它本身也是用 CSS 变量定义的，
+ * 所以这里可以直接覆盖，实现"同一套模板换配色"。
+ */
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif;
+}
+
+/* ---------------- 后台少量自定义 ---------------- */
+:root {
+  color-scheme: light;
+}
+
+/* 表格行 hover（后台列表用得最多） */
+.console-table tbody tr:hover {
+  background: var(--color-zinc-50, #fafafa);
+}
