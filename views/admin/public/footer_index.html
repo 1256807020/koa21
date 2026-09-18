@@ -23,26 +23,3 @@
 <script src="{{__HOST__}}/admin/js/ace-elements.min.js"></script>
 <script src="{{__HOST__}}/admin/js/ace.min.js"></script>
 
-<!-- 修复：登录后左侧(侧边)菜单展开又自动收起的问题
-     原因：1) 窄模式(menu-min)下子菜单为 hover 弹出，鼠标移开即收起；
-          2) submenu 的 click 委托可能被重复绑定，一次点击 toggle 两次(open->close)。
-     处理：退出 menu-min，移除可能存在的重复委托，改为稳定的一次性点击展开/保持。 -->
-<script type="text/javascript">
-  jQuery(function ($) {
-    var $sidebar = $('#sidebar')
-    if (!$sidebar.length) return
-    $sidebar.removeClass('menu-min')                 // 退出窄模式，避免 hover 收起
-    $sidebar.off('click', 'a.dropdown-toggle')        // 移除 Ace 默认/重复的 submenu 委托
-    $('.nav-list').off('click', 'a.dropdown-toggle')
-    // 纠正默认状态：清除 Ace 高度动画可能残留的内联样式，并仅展开当前所在菜单
-    $('.nav-list .submenu').css({ height: '', display: '' })
-    $('.nav-list>li').removeClass('open')
-    $('.nav-list>li.active').addClass('open')
-    // 稳定的点击展开/保持（由 .open>.submenu 的 CSS 控制显隐）
-    $('.nav-list').on('click', 'a.dropdown-toggle', function (e) {
-      e.preventDefault()
-      e.stopPropagation()
-      $(this).closest('li').toggleClass('open')
-    })
-  })
-</script>
