@@ -36,3 +36,6 @@ pnpm-debug.log*
 
 # 项目记忆目录（本地优先）
 .codebuddy/
+
+# 测试临时文件
+.tmp-*
