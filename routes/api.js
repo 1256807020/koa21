@@ -73,4 +73,10 @@ router.delete('/deleteCart',async (ctx)=>{
 
 
 })
+// 后台管理 JSON API（P0 底座）：/api/admin/* 统一返回 { code, message, data }
+// 鉴权(登录态 / CSRF / RBAC) 在阶段三补；本阶段先打通"能用 + 参数化防注入 + 统一出参"
+// adminApi 自身带 prefix '/admin'，叠加外层 /api → 最终路径 /api/admin/:resource/...
+const adminApi = require('./admin')
+router.use(adminApi)
+
 module.exports = router.routes()
