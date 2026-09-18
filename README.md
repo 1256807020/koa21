@@ -1,7 +1,14 @@
 # Koa21 CMS
 
-一套基于 Koa2 的内容管理系统（CMS）。前台为服务端渲染的官网，后台为管理界面。
+一套基于 **Koa 3** 的内容管理系统（CMS）。前台为服务端渲染的官网，后台为管理界面。
+
 2026-09 完成 **MongoDB → PostgreSQL 18** 数据层迁移与全套依赖升级，包管理由 npm 切换为 pnpm。
+
+> **为什么不再是"Koa2"**：Koa 3.0 于 **2025-04 正式发布**（距 Koa 2 已有 8 年；Koa 2.16 长期停在维护模式），
+> 本项目已跑在 **Koa 3.2.1** 上——这是当前 Koa 的**最新主线版本**，目前也没有 Koa 4 的计划。
+> Koa 3 的主要变化：Node ≥ 18、原生 async/await、`koa-session` 改为具名导出 `createSession()`，
+> 且 3.1+ **原生集成 `AsyncLocalStorage`**（无需第三方库即可在任意位置取到当前请求上下文）。
+> 若还在别处看到 "基于 Koa2" 的描述，那都是历史遗留文案——本仓库文案已统一为 Koa 3。
 
 ---
 
@@ -15,7 +22,7 @@
 
 | 层 | 技术 |
 |---|---|
-| Web 框架 | Koa 3.2.x + @koa/router |
+| Web 框架 | **Koa 3.2.1**（当前最新主线）+ @koa/router |
 | 会话 | koa-session（cookie session，httpOnly + signed） |
 | 模板 | koa-art-template + art-template（服务端渲染） |
 | 数据库 | PostgreSQL 18（驱动 `pg`） |
@@ -302,6 +309,14 @@ pnpm dev          # 默认 http://localhost:3000
 >
 > 另外两份参考：**[docs/koa3-projects-review.md](docs/koa3-projects-review.md)**（2026 年活跃 Koa 项目横向评审 +
 > 媒体存储出海选型）、**[docs/database-sql.md](docs/database-sql.md)**（SQL 实战）。
+>
+> 💡 **想把 `views` / `public` 换成现代 Vue/React？** —— `docs/frontend-architecture.md`
+> **§11** 给出了可立刻执行的清理路径（**先后台 SPA 化**：零 SEO 风险、一轮可删 400+ 老旧文件；
+> 再前台 SSG+ISR），并澄清了「打包时输出 HTML」与 DedeCMS「发布即生成静态」的关键差异。
+>
+> 🎨 **前台主题系统（换皮肤 / 模板可开发 / 保 SEO）实施细则**：**[`docs/theme-system.md`](docs/theme-system.md)**
+> —— 目录规范、**变量契约**（现状 `list` 装单篇文章、`newslist` 装子分类等命名混乱的整改对照表）、
+> `theme.json`、`snippets/` + htmx 局部渲染、主题切换与 `?theme=` 预览、安全约束、开发流程 5 步。
 
 ---
 

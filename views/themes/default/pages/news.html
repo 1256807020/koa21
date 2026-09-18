@@ -3,20 +3,20 @@
 
 <head>
 	<meta charset="utf-8">
-	<title>{{setting.site_title}}</title>
-  <meta name="Keywords" content="{{setting.site_keywords}}" />
-  <meta name="Description" content="{{setting.site_description}}" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/reset.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/common.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/heder_nav-menu.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/successful_case.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/bootstrap.min.css" />
+	<title>{{site.title}}</title>
+  <meta name="Keywords" content="{{site.keywords}}" />
+  <meta name="Description" content="{{site.description}}" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/reset.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/common.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/heder_nav-menu.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/successful_case.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/bootstrap.min.css" />
 </head>
 
 <body>
 
 
-	{{include 'default/public/header.html'}}
+	{{include '../partials/header.html'}}
 
 	<div id="header_nav-wrapper">
 		<div class="header_nav">
@@ -33,8 +33,8 @@
 
 		<div class="header_title clear">
 			<p>
-				{{each newslist}}
-				<a {{if pid==$value._id}} class="active" {{/if}} href="{{__HOST__}}/news?pid={{@$value._id}}">{{$value.title}}</a>
+				{{each subCates}}
+				<a {{if cateId==$value._id}} class="active" {{/if}} href="{{__HOST__}}/news?pid={{@$value._id}}">{{$value.title}}</a>
 				{{/each}}
 
 			</p>
@@ -49,7 +49,7 @@
 
 		<div class="main">
 			<ul class="clear">
-				{{each articlelist}}
+				{{each list}}
 				<li>
 
 					<a href="{{__HOST__}}/content/{{@$value._id}}"><img src="{{__HOST__}}/{{@$value.img_url}}" /></a>
@@ -94,20 +94,20 @@
 
 
 	<!-- 注意分页中的｝坑死我了 -->
-	<script src="/default/js/jquery-1.10.2.min.js"></script>
-	<script src="/default/js/jqPaginator.js"></script>
+	<script src="{{theme}}/js/jquery-1.10.2.min.js"></script>
+	<script src="{{theme}}/js/jqPaginator.js"></script>
 	<script>
 		$('#page').jqPaginator({
-			totalPages: {{totalPages}},
+			totalPages: {{page.totalPages}},
 			visiblePages: 3,
-			currentPage: {{page}},
+			currentPage: {{page.current}},
 			onPageChange: function (num, type) {
 				
 				if (type == 'change') {
-					{{if pid}}
-					location.href = "/case?pid={{pid}}&page=" + num;
+					{{if cateId}}
+					location.href = "/news?pid={{cateId}}&page=" + num;
 					{{else}}
-          location.href = "/case?page=" + num;
+          location.href = "/news?page=" + num;
 		{{/if}}
 			}}})
 	</script>

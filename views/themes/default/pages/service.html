@@ -4,17 +4,17 @@
 <head>
 	<meta charset="utf-8">
 	<title>尊享服务</title>
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/reset.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/common.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/heder_nav-menu.css" />
-	<link rel="stylesheet" type="text/css" href="{{__HOST__}}/default/css/service.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/reset.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/common.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/heder_nav-menu.css" />
+	<link rel="stylesheet" type="text/css" href="{{theme}}/css/service.css" />
 </head>
 
 <body>
 
 
 
-	{{include 'default/public/header.html'}}
+	{{include '../partials/header.html'}}
 
 	<div id="header_nav-wrapper">
 		<div class="header_nav">
@@ -46,7 +46,7 @@
 		<div class="main">
 
 			<ul class="clear">
-				{{each serviceList}}
+				{{each list}}
 				<li class="service">
 					<img src="{{__HOST__}}/{{$value.img_url}}" />
 					<a href="{{__HOST__}}/content/{{@$value._id}}">

@@ -1,0 +1,10 @@
+{
+  "name": "default",
+  "title": "默认主题",
+  "author": "koa21",
+  "version": "1.0.0",
+  "description": "官方样板主题：既是线上默认皮肤，同时也是『如何开发一套新主题』的参考样例。模板内的注释标注了每一块对应的契约变量，开发新主题时照着改即可。",
+  "preview": "assets/preview.png",
+  "pages": ["index", "news", "content", "case", "about", "service"],
+  "engine": ">=1.0.0"
+}
