@@ -219,6 +219,58 @@ pnpm dev          # 默认 http://localhost:3000
 
 ---
 
+## 十五、开发进度追踪（待办 / 已办）
+
+> 状态图例：【未开始】/【进行中】/【已完成】。本表随开发实时更新（规划见第十二章 Roadmap）。
+> **目标**：把本项目打磨成**教科书级的 Koa3 全栈框架案例**——安全、规范、SQL 进阶用法全部落到实处，供前端转全栈学习。
+
+### 已办（Done）
+- [x] 数据层 MongoDB → PostgreSQL 18 迁移（mongo-sql 翻译层，业务路由零改动）
+- [x] 依赖全面升级到最新稳定版，pnpm 精确锁定（`.npmrc` save-exact）
+- [x] 密码 md5 → bcrypt（首次登录自动升级，`admin.password` varchar(100)）
+- [x] 后台菜单交互修复（`__HOST__` 拼写 + 移除自定义 submenu 脚本，Ace 原生）
+- [x] 清理测试临时文件（`.tmp-koa.log`/`.tmp_login.png` git rm + `.gitignore` 忽略）
+- [x] 项目 README（技术栈/快速开始/配置/API/部署/安全现状）
+- [x] 架构评审：服务端/接口/权限/安全/SEO/部署/规范全维度（见第十二章 Roadmap）
+- [x] SQL 实战文档 `docs/database-sql.md`（表关联/多对多/实战 SQL/架构师解惑）
+
+### 待办 — P0 安全（上线前必修）
+- [ ] 删除接口重构：`GET /admin/remove?collectionName=表&id=` → `POST /api/admin/:resource/:id/delete`（+权限+CSRF）【未开始】
+- [ ] 全站 CSRF 防护（koa-csrf 或双提交 Cookie）【未开始】
+- [ ] 上传文件类型白名单（`tools.multer` fileFilter，仅图片）【未开始】
+- [ ] 前台富文本 XSS 净化（`content.html` `{{@content}}` → sanitize-html）【未开始】
+- [ ] 删 `login.js` 验证码明文 `console.log` + 生产 `COOKIE_SECURE=1`【未开始】
+- [ ] 登录失败限流/锁定（koa-ratelimit）【未开始】
+
+### 待办 — P0 升级前置（与框架无关，先建底座）
+- [ ] 后台 CRUD 补 JSON API（`/api/admin/*` 统一 `{code,message,data}`）【未开始】
+
+### 待办 — P1 质量 / 权限
+- [ ] RBAC（角色/权限点，替换纯登录态判断）【未开始】
+- [ ] 操作审计日志【未开始】
+- [ ] 统一响应体 + 错误码规范【未开始】
+- [ ] 统一输入校验层（zod/joi）【未开始】
+- [ ] API 版本化 `/api/v1`【未开始】
+
+### 待办 — P2 SEO / 部署 / 工程化
+- [ ] SEO 增强（sitemap.xml / robots.txt / meta / OG / JSON-LD）【未开始】
+- [ ] Dockerfile + pm2 cluster + CI/CD + nginx 示例【未开始】
+- [ ] 上传上对象存储（OSS/S3）【未开始】
+- [ ] healthz 健康检查 + 全局限流【未开始】
+- [ ] Swagger / OpenAPI 文档【未开始】
+- [ ] 测试套件（vitest）【未开始】
+- [ ] 替换 ueditor → wangEditor / TipTap【未开始】
+
+### 待办 — SQL 教学化（贯穿各批次，把基础/进阶/高级用上）
+- [ ] 后台列表 JOIN 替代冗余 catename + 消灭 N+1【随 P0 JSON API】
+- [ ] 树形分类 `WITH RECURSIVE` 递归 CTE【P0/P1】
+- [ ] 统计报表 `GROUP BY` + 窗口函数 `ROW_NUMBER()`【P1】
+- [ ] 分页 / 模糊搜索 / 事务 / `EXPLAIN` 实战样例（代码注释 + 文档）【持续】
+- [ ] 物理外键 + 级联删除（教学对比，可选）【P2 可选】
+- [ ] 多对多中间表（标签功能 demo）【P2 教学】
+
+---
+
 ## 许可证
 
 内部项目，未开放授权。
