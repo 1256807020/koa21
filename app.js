@@ -20,6 +20,7 @@ const DB = require('./model/db')
 const CODE = require('./utils/code')
 const { fail } = require('./utils/response')
 const { STATUS_BY_CODE } = require('./utils/handle')
+const store = require('./model/store')
 const { createRateLimit } = require('./middleware/rateLimit')
 
 const log = createLogger('app')
@@ -171,6 +172,9 @@ router.get('/healthz', async (ctx) => {
   } catch (err) {
     db = 'down'
   }
+  // 缓存/限流存储的实际后端：'redis' 表示已连上 Redis，'memory' 表示降级为进程内
+  // （多实例部署时如果是 memory，需要立刻关注——限额与权限缓存都不共享）
+  const cache = store.kind
   const healthy = db === 'up'
   ctx.status = healthy ? 200 : 503
   ctx.body = {
@@ -178,6 +182,7 @@ router.get('/healthz', async (ctx) => {
     env: config.env,
     uptime: Math.floor(process.uptime()), // 进程已运行秒数
     db,
+    cache,
     latencyMs: Date.now() - startedAt,
     time: new Date().toISOString()
   }
@@ -213,6 +218,9 @@ async function bootstrap () {
     process.exit(1)
   }
 
+  // 缓存/限流存储：优先 Redis，连不上会自动降级为进程内实现（不阻断启动）
+  await store.connect()
+
   const server = app.listen(config.port, config.host, () => {
     log.info(`环境：${config.env} | 监听：http://${config.host}:${config.port}`)
     log.info(`后台：http://localhost:${config.port}/admin/login`)
@@ -221,6 +229,7 @@ async function bootstrap () {
   const shutdown = async (signal) => {
     log.info(`收到 ${signal}，正在优雅关闭…`)
     server.close(async () => {
+      await store.close()
       await DB.close()
       log.info('已关闭')
       process.exit(0)

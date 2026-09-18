@@ -39,6 +39,7 @@
     "log4js": "6.9.1",
     "multer": "2.4.0",
     "pg": "8.23.0",
+    "redis": "6.2.1",
     "sanitize-html": "2.17.7",
     "svg-captcha": "1.4.0",
     "zod": "4.6.5"

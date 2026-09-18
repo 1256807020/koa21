@@ -9,6 +9,8 @@
 const DB = require('../model/db')
 const tools = require('../model/tools')
 const code = require('../utils/code')
+const config = require('../model/config')
+const store = require('../model/store')
 const rbacService = require('./rbacService')
 
 const TABLE = 'admin'
@@ -26,16 +28,17 @@ function safe (row) {
   return copy
 }
 
-// —— 会话状态缓存：adminId -> { state, expireAt } ——
+// —— 会话状态缓存 ——
 // 为什么需要：会话本身是客户端 Cookie，账号被删除/禁用/改角色后它不会自动失效。
-// 若每次请求都查库确认，会给 DB 增加无谓压力；这里用 10 秒 TTL 折中。
-// ⚠️ 多实例部署时各进程缓存不同步（最多 10 秒偏差），需换 Redis 或在网关统一校验。
-const SESSION_TTL = 10 * 1000
-const sessionCache = new Map()
+// 若每次请求都查库确认，会给 DB 增加无谓压力；这里用短 TTL 折中（默认 10 秒）。
+// 存储走 model/store.js：配 Redis 则多实例共享（改账号后全局即时失效），否则各进程各存一份。
+const SESSION_TTL = config.redis.sessionTtlMs
+const SESSION_CACHE_PREFIX = 'session:admin:'
+const sessionKey = (adminId) => `${SESSION_CACHE_PREFIX}${adminId}`
 
-function clearSessionCache (adminId) {
-  if (adminId === undefined || adminId === null) sessionCache.clear()
-  else sessionCache.delete(String(adminId))
+async function clearSessionCache (adminId) {
+  if (adminId === undefined || adminId === null) await store.delByPrefix(SESSION_CACHE_PREFIX)
+  else await store.del(sessionKey(adminId))
 }
 
 /**
@@ -46,15 +49,19 @@ async function getSessionState (adminId) {
   const key = String(adminId || '')
   if (!key) return null
 
-  const cached = sessionCache.get(key)
-  if (cached && cached.expireAt > Date.now()) return cached.state
+  const cached = await store.get(sessionKey(key))
+  if (cached !== null && cached !== undefined) {
+    // 注意：这里把"账号不存在"也缓存成字符串 'null'，
+    // 否则一个已被删除的账号会每次请求都去查库（等于给了攻击者一个免费的打库入口）。
+    return cached === 'null' ? null : JSON.parse(cached)
+  }
 
   const rows = await DB.find(TABLE, { _id: key }, SAFE_FIELDS)
   const row = rows[0]
   const state = row
     ? { _id: row._id, username: row.username, status: row.status, role_id: row.role_id || null }
     : null
-  sessionCache.set(key, { state, expireAt: Date.now() + SESSION_TTL })
+  await store.set(sessionKey(key), state ? JSON.stringify(state) : 'null', SESSION_TTL)
   return state
 }
 
@@ -124,8 +131,8 @@ async function update (id, { username, password, status, role_id }) {
     throw e
   }
   // 改动账号后必须让相关缓存失效：会话状态（10s TTL）与角色权限（30s TTL）
-  clearSessionCache(id)
-  rbacService.clearPermissionCache(data.role_id)
+  await clearSessionCache(id)
+  await rbacService.clearPermissionCache(data.role_id)
   return safe(rows[0]) // 不把 password 哈希回传给调用方
 }
 
@@ -138,7 +145,7 @@ async function remove (id) {
     throw e
   }
   // 账号已删 → 立刻清掉会话状态缓存，让旧会话在下一个请求就被拒绝
-  clearSessionCache(id)
+  await clearSessionCache(id)
   return true
 }
 

@@ -87,7 +87,8 @@ function buildSpec () {
       { name: '鉴权', description: 'CSRF token 签发' },
       { name: '后台内容', description: '资源驱动 CRUD，需登录 + CSRF + 权限点' },
       { name: '权限管理', description: 'RBAC 角色与权限点' },
-      { name: '审计日志', description: '写操作留痕查询' }
+      { name: '审计日志', description: '写操作留痕查询' },
+      { name: '统计报表', description: 'GROUP BY / 窗口函数 / EXPLAIN（SQL 教学）' }
     ],
     components: {
       schemas: {
@@ -97,7 +98,10 @@ function buildSpec () {
         AuditQuery: toJson(S.auditQuerySchema),
         RolePermission: toJson(S.rolePermissionSchema),
         ResourceAdd: { oneOf: Object.values(S.resourceAddSchemas).map((s) => toJson(s)), description: '新增资源请求体，形状取决于 :resource' },
-        ResourceUpdate: { oneOf: Object.values(S.resourceUpdateSchemas).map((s) => toJson(s)), description: '编辑资源请求体（字段可部分提交）' }
+        ResourceUpdate: { oneOf: Object.values(S.resourceUpdateSchemas).map((s) => toJson(s)), description: '编辑资源请求体（字段可部分提交）' },
+        StatsTopQuery: toJson(S.statsTopQuerySchema),
+        StatsMonthlyQuery: toJson(S.statsMonthlyQuerySchema),
+        StatsExplainQuery: toJson(S.statsExplainQuerySchema)
       },
       securitySchemes: {
         cookieAuth: {
@@ -267,6 +271,78 @@ function buildSpec () {
           parameters: [{ name: 'roleId', in: 'path', required: true, schema: { type: 'string' } }],
           requestBody: jsonBody(S.rolePermissionSchema),
           responses: { 200: jsonResp('更新后的权限点'), ...commonErrors }
+        }
+      },
+
+      // ---------------- 统计报表（SQL 教学） ----------------
+      '/api/v1/admin/stats/overview': {
+        get: {
+          tags: ['统计报表'],
+          summary: '内容概览与状态分布',
+          description: '用 `COUNT(*) FILTER (WHERE ...)` 一条 SQL 同时算出多个维度（只扫一次表）。需要权限点 `stats:view`。',
+          security: [{ cookieAuth: [] }],
+          responses: { 200: jsonResp('{ article, counts }'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/stats/categories': {
+        get: {
+          tags: ['统计报表'],
+          summary: '分类统计排行（GROUP BY + 窗口函数）',
+          description: [
+            '教学点：',
+            '- `LEFT JOIN ... ON a.pid = c._id AND a.status = 1`：过滤条件写在 **ON** 里，',
+            '  写进 WHERE 会把 LEFT JOIN 退化成 INNER JOIN，0 篇文章的分类会整行消失；',
+            '- 同时返回 `ROW_NUMBER` / `RANK` / `DENSE_RANK` 三种排名，可直接对比差异；',
+            '- `SUM() OVER ()` 算总占比，`SUM() OVER (ORDER BY ... ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` 算**累计占比**（帕累托分析）。'
+          ].join('\n'),
+          security: [{ cookieAuth: [] }],
+          responses: { 200: jsonResp('分类排行数组（含 pct / running_pct）'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/stats/top-articles': {
+        get: {
+          tags: ['统计报表'],
+          summary: '每个分类最新 N 篇（分组 TopN）',
+          description: '`PARTITION BY a.pid` 切窗 + `ROW_NUMBER()` 排序取前 N —— 分组 TopN 的标准解法。注意窗口函数不能直接写在 WHERE 里，需套一层子查询。',
+          security: [{ cookieAuth: [] }],
+          parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 20, default: 2 }, description: '每个分类取几篇' }],
+          responses: { 200: jsonResp('文章数组（含 rn_in_cate）'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/stats/monthly': {
+        get: {
+          tags: ['统计报表'],
+          summary: '按月发文趋势',
+          description: '`date_trunc(\'month\', add_time)` + `GROUP BY 1`（按第一个输出列分组）。',
+          security: [{ cookieAuth: [] }],
+          parameters: [{ name: 'months', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 36, default: 12 } }],
+          responses: { 200: jsonResp('{ month, article_count, hot_count } 数组'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/stats/explain/queries': {
+        get: {
+          tags: ['统计报表'],
+          summary: '可 EXPLAIN 的查询清单（白名单）',
+          security: [{ cookieAuth: [] }],
+          responses: { 200: jsonResp('[{ key, title, sql }]'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/stats/explain': {
+        get: {
+          tags: ['统计报表'],
+          summary: '执行计划分析（EXPLAIN ANALYZE）',
+          description: [
+            '`EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT JSON)` —— 看数据库"实际怎么执行"，而不是靠猜。',
+            '',
+            '⚠️ **安全红线**：`query` 只接受**白名单键**（预置查询的名字），**绝不接受原始 SQL**。',
+            '若允许传 SQL 文本，等于把数据库只读权限开放给任何调用方（SQL 注入 by design）。'
+          ].join('\n'),
+          security: [{ cookieAuth: [] }],
+          parameters: [
+            { name: 'query', in: 'query', required: true, schema: { type: 'string' }, description: '白名单键，见 /explain/queries' },
+            { name: 'analyze', in: 'query', schema: { type: 'string', enum: ['0', '1', 'true', 'false'] }, description: '是否真实执行（默认 true，只读查询无副作用）' }
+          ],
+          responses: { 200: jsonResp('{ key, sql, planningTimeMs, executionTimeMs, rootNodeType, plan }'), ...commonErrors }
         }
       },
 

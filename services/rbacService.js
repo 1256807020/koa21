@@ -20,6 +20,8 @@
 // ============================================================
 const DB = require('../model/db')
 const CODE = require('../utils/code')
+const config = require('../model/config')
+const store = require('../model/store')
 const createLogger = require('../model/logger')
 
 const log = createLogger('rbac')
@@ -46,14 +48,17 @@ const TABLE_RESOURCE = Object.fromEntries(
 const ROLE_FIELDS = { _id: 1, code: 1, name: 1, description: 1, status: 1, add_time: 1 }
 const PERMISSION_FIELDS = { _id: 1, code: 1, name: 1, grp: 1, sort: 1 }
 
-// —— 权限缓存：roleId -> { codes:Set<string>, expireAt:number } ——
-const CACHE_TTL = 30 * 1000
-const permCache = new Map()
+// —— 权限缓存 ——
+// 用 model/store.js 统一存储：配了 Redis 就多实例共享（权限变更全局即时生效），
+// 否则降级为进程内 Map（各实例最长 30s 才一致）。
+const CACHE_TTL = config.redis.permissionTtlMs
+const PERM_CACHE_PREFIX = 'rbac:perms:'
+const permKey = (roleId) => `${PERM_CACHE_PREFIX}${roleId}`
 
 /** 清缓存：传 roleId 只清该角色；不传清全部（角色/映射变更后调用） */
-function clearPermissionCache (roleId) {
-  if (roleId === undefined || roleId === null) permCache.clear()
-  else permCache.delete(String(roleId))
+async function clearPermissionCache (roleId) {
+  if (roleId === undefined || roleId === null) await store.delByPrefix(PERM_CACHE_PREFIX)
+  else await store.del(permKey(roleId))
 }
 
 function notFound (message) {
@@ -96,7 +101,7 @@ async function updateRole (roleId, data) {
 
   const { rowCount, rows } = await DB.update('role', { _id: id }, patch)
   if (!rowCount) throw notFound('角色不存在')
-  clearPermissionCache(id) // 角色状态可能变化，权限缓存作废
+  await clearPermissionCache(id) // 角色状态可能变化，权限缓存作废
   return rows[0]
 }
 
@@ -118,7 +123,7 @@ async function removeRole (roleId) {
     await client.query('DELETE FROM role_permission WHERE role_id = $1', [id])
     await client.query('DELETE FROM role WHERE _id = $1', [id])
   })
-  clearPermissionCache(id)
+  await clearPermissionCache(id)
   log.info(`删除角色：${role.code}（已同步清理关联权限）`)
   return true
 }
@@ -169,7 +174,7 @@ async function setRolePermissions (roleId, codes = []) {
     }
   })
 
-  clearPermissionCache(id) // 立即生效，不让调用方等 30s
+  await clearPermissionCache(id) // 立即生效，不让调用方等 30s
   log.info(`更新角色权限：${role.code} → ${permRows.length} 个权限点`)
   return permRows.map((row) => row.code)
 }
@@ -181,8 +186,16 @@ async function resolvePermissions (roleId) {
   const key = String(roleId || '')
   if (!key) return new Set()
 
-  const cached = permCache.get(key)
-  if (cached && cached.expireAt > Date.now()) return cached.codes
+  // 缓存命中：存的是 JSON 数组（Set 不能直接序列化）
+  const cached = await store.get(permKey(key))
+  if (cached !== null && cached !== undefined) {
+    try {
+      return new Set(JSON.parse(cached))
+    } catch (err) {
+      // 缓存内容损坏（例如序列化格式变过）→ 忽略缓存回源查库，不要因此报错
+      log.warn(`权限缓存解析失败，回源查库：${err.message}`)
+    }
+  }
 
   const { rows } = await DB.query(
     `SELECT p.code
@@ -192,7 +205,7 @@ async function resolvePermissions (roleId) {
     [key]
   )
   const codes = new Set(rows.map((row) => row.code))
-  permCache.set(key, { codes, expireAt: Date.now() + CACHE_TTL })
+  await store.set(permKey(key), JSON.stringify([...codes]), CACHE_TTL)
   return codes
 }
 

@@ -208,15 +208,104 @@ WITH RECURSIVE tree AS (
 SELECT * FROM tree ORDER BY depth, sort;
 ```
 
-### 4.6 统计报表
+### 4.6 统计报表（聚合 + `GROUP BY`）
+
+本节所有 SQL 都已在项目里落地，可直接调接口看结果（需 `stats:view` 权限）：
+`GET /api/v1/admin/stats/overview`、`/categories`、`/top-articles`、`/monthly`。
+
 ```sql
--- 状态分布
+-- ① 状态分布：最朴素的 GROUP BY
 SELECT status, COUNT(*) FROM article GROUP BY status;
--- 近 7 天每天新增文章数
-SELECT date_trunc('day', add_time) AS 天, COUNT(*) AS 新增
-FROM article WHERE add_time >= now() - interval '7 day'
-GROUP BY 1 ORDER BY 1;
+
+-- ② 一条 SQL 同时算多个维度：聚合过滤 FILTER（PostgreSQL 语法）
+--    比写 6 条 SELECT COUNT(*) ... WHERE 快得多——只扫一次表
+SELECT
+  COUNT(*)::int                             AS total,
+  COUNT(*) FILTER (WHERE status = 1)::int   AS online,
+  COUNT(*) FILTER (WHERE is_best = 1)::int  AS best,
+  COUNT(*) FILTER (WHERE is_hot  = 1)::int  AS hot
+FROM article;
+
+-- ③ 按月趋势：date_trunc 把时间归一到月初，再 GROUP BY
+--    `GROUP BY 1` 是"按第 1 个输出列分组"的简写（短，但可读性差，列多时慎用）
+SELECT to_char(date_trunc('month', add_time), 'YYYY-MM') AS month,
+       COUNT(*)::int AS article_count
+  FROM article
+ WHERE status = 1
+   AND add_time >= date_trunc('month', now()) - (12 - 1) * interval '1 month'
+ GROUP BY 1
+ ORDER BY 1 DESC;
 ```
+
+> **`FILTER (WHERE ...)` vs `CASE WHEN ... THEN 1 END`**：两者等价，但 `FILTER` 更直观、更容易被优化器识别。
+> 老代码里常见的 `SUM(CASE WHEN status=1 THEN 1 ELSE 0 END)` 现在可以写成 `COUNT(*) FILTER (WHERE status=1)`。
+
+### 4.6.1 窗口函数：排名 / 分组 TopN / 占比与累计占比
+
+这是本项目 `services/statsService.js` 里**实际在用**的 SQL（`GET /api/v1/admin/stats/categories`）。
+窗口函数的核心思想：**在不折叠行数的前提下做聚合**——`GROUP BY` 会把 10 行压成 3 行，
+而窗口函数保留全部 10 行，额外多出一列"排名/占比/累计值"。
+
+```sql
+-- ① 分类排行：LEFT JOIN + GROUP BY + 三种排名 + 占比 + 累计占比
+WITH cate_stat AS (
+  SELECT c._id, c.title, COUNT(a._id)::int AS article_count
+    FROM articlecate c
+    -- ⚠️ 关键：过滤条件写在 ON 里，不要写进 WHERE
+    --    写进 WHERE 会把 LEFT JOIN 退化成 INNER JOIN：
+    --    "一篇在架文章都没有的分类"会整行消失（很隐蔽的 bug）
+    LEFT JOIN article a
+           ON a.pid = c._id
+          AND a.status = 1
+   GROUP BY c._id, c.title
+),
+ranked AS (
+  SELECT _id, title, article_count,
+         ROW_NUMBER() OVER (ORDER BY article_count DESC, title) AS row_no,   -- 1,2,3,4（永不重复）
+         RANK()       OVER (ORDER BY article_count DESC)        AS rank_no,  -- 1,2,2,4（并列后跳号）
+         DENSE_RANK() OVER (ORDER BY article_count DESC)        AS dense_no, -- 1,2,2,3（并列后不跳号）
+         SUM(article_count) OVER ()                             AS total,    -- 不带 ORDER BY = 全集总和
+         ROUND(100.0 * article_count / NULLIF(SUM(article_count) OVER (), 0), 2) AS pct,
+         -- 累计值（running total）：这就是帕累托/ABC 分析的原理
+         SUM(article_count) OVER (
+           ORDER BY article_count DESC, title
+           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+         ) AS running_total
+    FROM cate_stat
+)
+SELECT *, ROUND(100.0 * running_total / NULLIF(total, 0), 2) AS running_pct
+  FROM ranked
+ ORDER BY row_no;
+```
+
+实测输出（本项目种子数据）能直接看出三种排名的差别：
+
+| title | article_count | row_no | rank_no | dense_no | pct | running_pct |
+|---|---|---|---|---|---|---|
+| 服务 | 2 | 1 | **1** | **1** | 25.00 | 25.00 |
+| 家居案例 | 2 | 2 | **1** | **1** | 25.00 | 50.00 |
+| 行业新闻 | 2 | 3 | **1** | **1** | 25.00 | 75.00 |
+| 公司动态 | 1 | 4 | **4** | **2** | 12.50 | 87.50 |
+
+→ 三个并列第 1 之后：`RANK` 跳到 4，`DENSE_RANK` 只到 2。**这就是两者的全部区别。**
+
+```sql
+-- ② 分组 TopN：每个分类最新 2 篇（GET /api/v1/admin/stats/top-articles）
+SELECT *
+  FROM (
+    SELECT a._id, a.title, a.pid, c.title AS cate_name, a.add_time,
+           ROW_NUMBER() OVER (PARTITION BY a.pid ORDER BY a.add_time DESC) AS rn_in_cate
+      FROM article a
+      LEFT JOIN articlecate c ON c._id = a.pid
+     WHERE a.status = 1
+  ) t
+ WHERE rn_in_cate <= 2          -- ⚠️ 窗口函数不能直接写在 WHERE 里（执行顺序：WHERE 早于窗口函数）
+ ORDER BY pid, rn_in_cate;      --    所以必须套一层子查询
+```
+
+> **为什么"分组 TopN"值得单独记**：这是面试与实战高频题。
+> MySQL 5.x 时代要靠变量或相关子查询（又慢又绕），现在 `ROW_NUMBER() OVER (PARTITION BY ...)` 一行解决。
+> 同类还有 `LAG/LEAD`（取上下篇，见 `contentService.getArticle`）、`NTILE(n)`（分桶）等。
 
 ### 4.7 联表更新（分类改名，同步冗余字段 `catename`）
 ```sql
@@ -250,14 +339,53 @@ UPDATE articlecate SET status = 0 WHERE _id = '...';
 COMMIT;   -- 任一步失败则 ROLLBACK; 保证要么都成功要么都回滚
 ```
 
-### 4.11 性能分析
+### 4.11 性能分析（`EXPLAIN`）——看执行计划，而不是猜
+
 ```sql
 EXPLAIN ANALYZE
 SELECT a.title, c.title
 FROM article a LEFT JOIN articlecate c ON a.pid = c._id
 WHERE a.status = 1 ORDER BY a.add_time DESC LIMIT 10;
 ```
-看输出里有没有 `Seq Scan`（全表扫描，慢）→ 给 `WHERE`/`JOIN` 字段加索引。
+
+**本项目已提供接口化的 EXPLAIN**（白名单制，见下）：
+```
+GET /api/v1/admin/stats/explain/queries              # 列出可分析的查询
+GET /api/v1/admin/stats/explain?query=public-articles  # 拿执行计划（JSON）
+```
+
+#### 怎么读 EXPLAIN 输出
+
+| 关键字 | 含义 | 要警惕的信号 |
+|---|---|---|
+| `Seq Scan` | 全表扫描 | 大表上出现 = 缺索引，或条件区分度太低 |
+| `Index Scan` | 走索引，再回表取数据 | 正常；回表多说明索引没覆盖到所需列 |
+| `Index Only Scan` | 只读索引就够（不用回表） | 最优，可用覆盖索引达成 |
+| `Bitmap Heap Scan` | 位图扫描后回表 | 中等选择率时出现，通常合理 |
+| `Nested Loop` | 嵌套循环连接 | 两者都大时会**爆炸**（O(n×m)）——要改成 Hash Join |
+| `Hash Join` / `Merge Join` | 哈希/归并连接 | 大表连接更友好 |
+| `Sort` + `external merge Disk` | 排序落到磁盘 | 说明 `work_mem` 不够或排序量过大 |
+| `rows`（估算）vs `actual rows` | 估算 vs 实际行数 | **差距百倍以上**说明统计信息过期 → `ANALYZE 表名` |
+
+#### 本项目提供的白名单查询
+
+`services/statsService.js` 里预置了 6 条查询可做 EXPLAIN：前台文章列表、分类树（递归 CTE）、
+分类统计（GROUP BY + 窗口）、文章详情（主键查询）、审计分页（索引扫描）、标题 ILIKE 搜索。
+
+> ⚠️ **安全红线（很重要）**：接口只接受**白名单键**（查询的名字），**绝不接受原始 SQL**。
+> 如果开放"帮我 EXPLAIN 任意 SQL"，那就等于把数据库只读权限送给了任何调用方——
+> 这是"设计出来的 SQL 注入"，比参数没写好的注入更危险。
+>
+> 顺带一个观察点：`title ILIKE '%x%'` 这种**前置通配**的模糊搜索**用不上普通 B-tree 索引**，
+> 你会看到 `Seq Scan`。要优化得上 `pg_trgm` 扩展 + GIN 索引（进阶话题）。
+
+#### 常用参数
+
+```sql
+EXPLAIN ANALYZE ...            -- 真实执行并给实际耗时/行数（注意：会真的跑一遍）
+EXPLAIN (ANALYZE, BUFFERS) ... -- 附带缓存命中情况（shared hit / read）
+EXPLAIN (FORMAT JSON) ...      -- 程序可读（本项目接口用的就是这个）
+```
 
 ---
 

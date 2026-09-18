@@ -69,16 +69,20 @@ router.use(auditLog)
 
 // 资源存在性校验：未知资源直接 404。
 // 必须放在**权限校验之前**——否则超管访问 /admin/foo/list 会因"没有 foo:list 权限"得到 403，
-// 把"资源不存在"错报成"无权限"，排查时非常费解。（登录后才可探测，不构成信息泄露。）
-router.use((ctx, next) => {
+// 把"资源不存在"错报成"无权限"，排查时非常费解。
+//
+// ⚠️ 必须作为**路由级**中间件（写在每个路由的中间件链里），不能用 router.use()：
+// router.use 的中间件在"路由尚未匹配"时就执行，那时 ctx.params 还是空的
+// （实测会变成 `未知资源：undefined`，把正常请求全打回 404）。
+function knownResource (ctx, next) {
   if (!services[ctx.params.resource]) {
-    return fail(ctx, code.NOT_FOUND, `未知资源：${ctx.params.resource}`, null, 404)
+    return fail(ctx, code.NOT_FOUND, `未知资源：${ctx.params.resource || '(空)'}`, null, 404)
   }
   return next()
-})
+}
 
 // 列表（需要 xxx:list）
-router.get('/:resource/list', requirePermissionByResource('list'), handle(async (ctx) => {
+router.get('/:resource/list', knownResource, requirePermissionByResource('list'), handle(async (ctx) => {
   const svc = getService(ctx)
   const { page, pageSize } = parse(pageSchema, ctx.query)
   // ⚠️ 展开顺序：page/pageSize 必须放最后。
@@ -89,7 +93,7 @@ router.get('/:resource/list', requirePermissionByResource('list'), handle(async 
 }))
 
 // 详情（同样按"查看"权限，不额外区分）
-router.get('/:resource/:id', requirePermissionByResource('list'), handle(async (ctx) => {
+router.get('/:resource/:id', knownResource, requirePermissionByResource('list'), handle(async (ctx) => {
   const svc = getService(ctx)
   const item = await svc.getById(ctx.params.id)
   if (!item) {
@@ -101,7 +105,7 @@ router.get('/:resource/:id', requirePermissionByResource('list'), handle(async (
 }))
 
 // 新增（需要 xxx:create）
-router.post('/:resource/add', requirePermissionByResource('create'), handle(async (ctx) => {
+router.post('/:resource/add', knownResource, requirePermissionByResource('create'), handle(async (ctx) => {
   const svc = getService(ctx)
   const schema = addSchemas[ctx.params.resource]
   if (!schema) {
@@ -115,7 +119,7 @@ router.post('/:resource/add', requirePermissionByResource('create'), handle(asyn
 }))
 
 // 编辑（需要 xxx:update）
-router.post('/:resource/:id/edit', requirePermissionByResource('update'), handle(async (ctx) => {
+router.post('/:resource/:id/edit', knownResource, requirePermissionByResource('update'), handle(async (ctx) => {
   const svc = getService(ctx)
   const schema = addSchemas[ctx.params.resource]
   if (!schema) {
@@ -130,7 +134,7 @@ router.post('/:resource/:id/edit', requirePermissionByResource('update'), handle
 }))
 
 // 删除（需要 xxx:delete；真正调用 DB.remove）
-router.post('/:resource/:id/delete', requirePermissionByResource('delete'), handle(async (ctx) => {
+router.post('/:resource/:id/delete', knownResource, requirePermissionByResource('delete'), handle(async (ctx) => {
   const svc = getService(ctx)
   await svc.remove(ctx.params.id)
   ok(ctx, null, '删除成功')

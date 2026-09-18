@@ -438,14 +438,190 @@ router.post('/doAdd',
 **① 必须在 ② 之前**：multer 会把文件**落盘**，若权限检查放在后面，
 未授权用户也能成功上传文件（浪费磁盘、可能留下恶意文件）。这是"顺序即安全"的典型例子。
 
+## 阶段六：接口全矩阵审计（先找隐患，再修）
+
+### 6.1 两种手段各司其职
+- **接口矩阵用脚本**（可重复、可断言）：边界值、越权、非法输入、错误方法逐条跑，24→33 项断言。
+- **真实浏览器用 agent-browser**（curl 看不到的部分）：静态资源是否 404、图片是否真的渲染、验证码图是否加载、CSRF 隐藏域是否存在。
+  结果：首页 **19 个资源全 200、0 张破损图**；登录页验证码图 120×34 正常加载、`_csrf` 隐藏域存在（32 位）；`/news` 0 失败。
+- **一个正面发现**：验证码**前端读不出来**——svg-captcha 输出的是**路径化 SVG（没有 `<text>` 节点）**，
+  且会话 Cookie 是 `httpOnly`（我实测"用 JS 注入会话 Cookie"失败，正是 httpOnly 在起作用）。
+  也就是说"读 DOM / 读会话绕过验证码"两条路都走不通。
+
+### 6.2 修复的 9 个问题（每条都有复现断言）
+| # | 问题 | 根因 | 修法 |
+| --- | --- | --- | --- |
+| 1 | **非法 id 返回 500**（公开详情/资源详情/删除/编辑 4 处） | `DB.getObjectId()` 抛的是**无错误码的普通 Error**，被当"未知错误"走 500 | 抛 `code = PARAM_ERROR`；全局错误处理按 `STATUS_BY_CODE` 映射状态 → 现在一律 400 |
+| 2 | 未知资源返回 **403**（应为 404） | 权限校验排在资源校验之前，"资源不存在"被错报成"无权限" | 增加 `knownResource` 前置校验 |
+| 3 | **可绑定不存在的角色** | `adminService.create/update` 不校验 `role_id` → 造出"无权限孤儿" | `assertRoleExists()` |
+| 4 | **账号删除/禁用后旧会话仍有效**（权限撤销不即时） | 会话是客户端 Cookie，不会自己失效 | `requireLogin` 每次回查 DB（10s 缓存）确认账号存在且 `status=1`，并把 `role_id` 刷新进会话（顺带解决"改角色要重登"）；`login.js` 密码正确后也校验 `status` |
+| 5 | **开放重定向** | 删除后 `ctx.redirect(Referer)`，实测可 302 到 `https://evil.example.com` | 新增 `utils/redirect.js` 的 `safeBackPath()`，只允许站内相对路径 |
+| 6 | **分页总数统计用错表** | `focus.js`/`link.js` 的 `count` 查的是 `article` 表 → 总页数算错 | 改成各自的表 |
+| 7 | **校验结果被无声覆盖** | `svc.list({ page, pageSize, ...ctx.query })`：展开在后面，原始字符串覆盖了 zod 转换后的值 | 把 `page/pageSize` 放到展开之后 |
+| 8 | **删除会产生孤儿数据** | 删分类不管子分类/文章；删管理员可以删掉自己或最后一个管理员（删光就再也进不去后台） | SSR `/admin/remove` 加业务守卫；并把**静默失败改成错误页**（原来删失败也静默回跳，用户以为删成功了） |
+| 9 | **硬编码** | 3 个分类 ID 与 4 处 `pageSize=3` 散落在路由里 | 集中到 `config.frontend` / `config.adminPageSize`，支持 env 覆盖（后台默认 3→10，原值属教程遗留） |
+
+### 6.3 修复中自己引入的回归（同源坑踩了第二次）
+修 #2 时我用 `router.use()` 做资源校验，结果**所有请求都变成 `未知资源：undefined`**。
+根因与 §5.8 坑 A **完全同源**：`router.use` 的中间件在"**路由尚未匹配**"时执行，那时 `ctx.params` 还是空的。
+→ 必须写成**路由级**中间件：`router.get('/:resource/list', knownResource, requirePermission..., handler)`。
+
+**沉淀成规则**：**只要依赖 `ctx.params`，就必须保证读取发生在"路由已匹配"之后**（路由级中间件或 handler 内）。
+这个坑我踩了两次（审计 `resource` 全空、资源校验把正常请求全打回 404），已写入 `docs/dev-notes.md` 作为 checklist。
+
+### 6.4 已记录但暂不修（需要时再做）
+- **上传文件不随记录删除**：删文章后 `public/upload` 里的图片仍留着 → 需要"删除时清理文件"或对象存储生命周期规则。
+- **`audit_log` 无上限增长**：需要归档/清理策略（例如保留 90 天）。
+- **SSR `doEdit` 的 `prevPage` 隐藏域**同样可被伪造（同一类开放重定向，风险低于 Referer 场景）→ 后续统一改走 `safeBackPath`。
+
+## 阶段七：Redis 接入 + SQL 教学化收尾
+
+### 7.1 为什么要抽一个 `model/store.js`
+限流计数、权限缓存、会话复核缓存，这三样都需要"**带过期时间 + 跨请求共享**"的存储。
+单实例时进程内 Map 够用；**多实例时每台机器各存一份** → 限流各算各的（N 个实例 = 限额被放大 N 倍）、
+权限/账号变更要等 TTL 到期才在各实例一致。
+所以抽一层 `model/store.js`：**业务代码只调 `store.get/set/incr/ttl/del/delByPrefix`，不关心后端是 Redis 还是内存**。
+
+### 7.2 降级（graceful degradation），而不是硬依赖
+`store.connect()` 启动时尝试连 Redis：
+- 成功 → `kind = 'redis'`，日志明确写出"走 Redis"
+- 失败 → 打 warn 退回进程内实现，**不阻断启动**（可用性优先），同时把风险讲清楚
+
+`/healthz` 新增 `cache` 字段（`redis` / `memory`）——**运维一眼就能看出"限流到底有没有走共享存储"**。
+这一招很实用：很多人部署完不确定限流是否生效，加个字段就自证了。
+
+### 7.3 键设计（全部是 Redis 友好的原子操作）
+
+| 用途 | 键 | 结构 | 说明 |
+| --- | --- | --- | --- |
+| 全局限流 | `ratelimit:<ip>:<窗口编号>` | INCR + TTL | 窗口编号拼进 key，天然避免"先 incr 再 expire"的竞态；窗口一换就是全新计数 |
+| 登录失败 | `login:fail:<user>` | INCR + TTL(15min) | **原子自增**，多实例并发也不丢计数 |
+| 账号锁定 | `login:lock:<user>` | SET + TTL(15min) | 用 TTL 表达锁定期，不需要定时任务清理 |
+| 权限缓存 | `rbac:perms:<roleId>` | SET(JSON) + TTL(30s) | 改权限时主动 DEL，让变更立刻生效 |
+| 会话复核 | `session:admin:<id>` | SET(JSON/'null') + TTL(10s) | 连"账号不存在"也缓存，避免被删账号持续打库 |
+
+**教学点**：
+1. **不要 read-modify-write**：多实例并发下会丢计数（经典竞态），要用 `INCR` 这类原子命令。
+2. **`KEYS` 是禁忌**：大库上会阻塞 Redis 单线程。批量删除用**游标 `SCAN`**（`delByPrefix` 就是这么实现的）。
+3. **用 TTL 表达时间语义**：窗口、锁定期全交给 Redis 过期，省掉定时清理任务。
+4. **序列化要容错**：`Set` 不能直接存 → 转 JSON 数组；读到坏数据要能忽略缓存回源查库，而不是报错。
+
+### 7.4 限流器故障必须 fail-open
+`middleware/rateLimit.js` 里 `store.incr` 抛错时 → 记 error 然后**放行**。
+理由：限流是"最后一道护栏"，**不是安全边界**（真正的安全在鉴权/CSRF/RBAC）。
+让"限流器故障"升级成"全站 5xx"得不偿失。
+
+### 7.5 SQL 教学化收尾（剩余两项）
+1. **统计报表**（`services/statsService.js` + `routes/api/stats.js`，权限点 `stats:view`）
+   - `COUNT(*) FILTER (WHERE ...)`：一条 SQL 出多个维度（只扫一次表）
+   - `GROUP BY` + `date_trunc` 按月趋势；`GROUP BY 1` 位置引用
+   - **窗口函数**：`ROW_NUMBER` / `RANK` / `DENSE_RANK` 三种排名 + `SUM() OVER ()` 占比 +
+     `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` 累计占比（帕累托分析原理）
+   - **分组 TopN**：`PARTITION BY` + `ROW_NUMBER`，并强调"窗口函数不能写进 WHERE，必须套一层子查询"
+2. **EXPLAIN**（`GET /api/v1/admin/stats/explain?query=<白名单键>`）
+   - `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT JSON)` → 返回 planning/execution 耗时 + 根节点类型 + 完整计划
+   - **安全红线**：只接受**白名单键**，绝不接受客户端传来的 SQL——
+     否则等于把数据库只读权限开放给任何调用方（"设计出来的 SQL 注入"）
+   - `docs/database-sql.md` 补了"怎么读 EXPLAIN"对照表（Seq Scan / Index Scan / Nested Loop 爆炸 /
+     估算行数与实际行数差百倍 → `ANALYZE` 表；以及 `ILIKE '%x%'` 用不上 B-tree 索引）
+
+### 7.6 本轮踩坑：`LEFT JOIN` 的过滤条件写错位置会静默丢数据
+```sql
+-- ✅ 正确：过滤写在 ON 里，0 篇文章的分类仍然保留（count = 0）
+LEFT JOIN article a ON a.pid = c._id AND a.status = 1
+
+-- ❌ 错误：过滤写进 WHERE，LEFT JOIN 退化成 INNER JOIN，0 篇文章的分类整行消失
+LEFT JOIN article a ON a.pid = c._id
+WHERE a.status = 1
+```
+这个 bug **不报错、只是少几行**，非常隐蔽。测试里专门加了断言
+「**0 篇文章的分类仍在结果中**」把行为锁住（种子数据里"成功案例"就是这样的分类）。
+
+## 阶段八：第二轮全量审计（60 项断言）+ 关于 CommonJS/ESM
+
+### 8.0 测试怎么做到"全量"
+- **先程序化枚举路由**，不从文档抄（文档会过期、会漏）：递归遍历 `router.stack`（`@koa/router` 的
+  `routes()` 返回值上挂了 `.router` 引用），共 **150 条** —— 前台 6 / JSON API 66（=33 条 × 2 个版本前缀）/ SSR 后台 78。
+- 脚本矩阵 **60 项断言**：响应信封一致性、公开接口字段白名单、**三角色权限矩阵**、安全探测
+  （SQLi / 原型污染 / 畸形 JSON / 错误 Content-Type / 超大 body / 存储型 XSS 闭环）、
+  SSR 页面可达性、**审计覆盖**、上传与登出行为。
+- 真实浏览器（agent-browser）：前台 3 页 **0 失败资源、0 破损图**；`/api/v1/docs` 的 Swagger UI 正常渲染；
+  登录页验证码图 120px、`_csrf` 隐藏域存在、**0 个 JS 错误**。
+
+### 8.1 修复清单（11 项，全部有复现断言）
+
+| # | 问题 | 根因 | 修法 |
+| --- | --- | --- | --- |
+| 1 | **SSR 后台写操作完全不进审计** | `auditLog` 只挂在 `/api/v1/admin/*` | 让 `auditLog` 支持 SSR（路径第二段 / `body.collectionName` 推断资源，并用 `TABLE_RESOURCE` 统一命名），挂到 `routes/admin.js` |
+| 2 | **`/admin/editorUpload` 绕过上传白名单** | 它自成一套更弱逻辑，且 `FILE_EXT` 放开 zip/rar/doc/pdf/txt | 按 action 隔离白名单（图片/视频）+ 扩展名与 MIME 双校验 + 涂鸦校验 PNG 魔数 + **取消 uploadfile** |
+| 3 | `uploadvideo` **永远拒绝视频** | 用 `IMAGE_EXT` 校验视频（逻辑 bug） | 按 action 取对应白名单 |
+| 4 | 3 个空壳写接口（`addCart`/`editPeopleInfo`/`deleteCart`） | 教学残留；未鉴权、无 CSRF、返回旧格式、还 `console.log(body)` | 直接删除 |
+| 5 | `/api/v1` 根、`catelist`、`newslist` 返回旧格式 | 历史实现未随统一响应体改造 | 全部收敛为 `{code,message,data}` |
+| 6 | **`newslist` 不过滤 `status`** | `DB.find('article', {})` 条件为空 | 加 `status:1`（**已下架文章从公开接口漏出 = 数据泄露**）+ 字段白名单 |
+| 7 | `catelist` 返回整表原始行 | 投影传 `null`（= `SELECT *`） | 传字段白名单 |
+| 8 | `pageSize` 写死 5 | 硬编码 | 改用 zod `pageSchema`，支持 `pageSize` 参数 |
+| 9 | **GET 登出可被跨站触发** | `/admin/login/loginOut` 是 GET，`<img src>` 即可强制下线 | 加 CSRF（token 放 query，双提交 Cookie 下安全），并**彻底销毁会话**（`ctx.session=null`） |
+| 10 | `routes/admin/user.js` 死模块 | edit/delete 只返回占位文本、list/add 无数据源、全站无链接引用 | 删除模块 + 2 个静态样板模板 |
+| 11 | `router.all('/editorUpload')` 注册 40+ 种 HTTP 方法 | 用了 `router.all`（含 TRACE/ACL/MKCALENDAR…） | 收窄为 `router.get` + `router.post` |
+
+### 8.2 最值得记的两项（为什么它们是真隐患）
+**① 审计只覆盖 API、不覆盖 SSR 后台** —— 这个项目的**实际使用入口是 SSR 后台**（运营在页面上点增删改），
+而审计只挂了 JSON API。结果是"审计日志看起来有，但主要操作全都没记"，等于审计形同虚设。
+教训：做审计/埋点这类"完整性敏感"的功能时，要问一句 **"有几个入口？我全挂上了吗？"**
+
+② **上传是"多条路"的典型**：本项目有两处上传（`tools.multer` 与 `model/ueditor`），
+P0 只加固了前者，编辑器那条就成了绕过口子。更糟的是它原 `FILE_EXT` 放开 **zip/rar/doc** ——
+这已经不是"XSS 风险"，而是**把自己的域名变成文件托管服务**（钓鱼页、木马分发的绝佳温床）。
+教训：安全加固要**按能力（capability）清点**，不能按"我记得改过的那个文件"清点。
+
+### 8.3 验证
+- 脚本 **60/60 通过**，其中 4 项是补充回归：登出被拒后登录态仍在（防误杀）、带 token 登出 → 302、
+  登出后会话失效 → 401、**下架文章在 `/public/articles` 与旧 `/newslist` 均不可见**。
+- 单测 **54 → 68 项**（新增 `tests/ueditor.test.js` 9 例、`tests/auditLog.test.js` 5 例）。
+- `npx eslint .` **0 errors**。
+
+### 8.4 一个"查了但不是 bug"的点（记下来以免重复怀疑）
+前台首页 `typeof jQuery === 'undefined'` 一度像是"模板用了 `$` 却没加载 jQuery"。
+**实测结论：不是问题** —— 首页只用 Swiper（不需要 jQuery）；只有 `/news`、`/case` 用到 jQuery，
+且它们用**绝对路径** `/default/js/jquery-1.10.2.min.js` 引入，实测 `typeof jQuery === 'function'`、0 失败资源。
+（我最初用 `grep -oE '<script[^>]*src="[^"]*"' | sed 's/.*src="//'` 提取时，`.*` 把开头的 `/` 一起吃掉了，
+才误判成相对路径会 404。**教训：文本提取的结论要用浏览器复核，别只信字符串。**）
+
+### 8.5 为什么本项目还在用 `require`（CommonJS）而不是 `import`（ESM）
+
+**先说结论：能不用 ESM 吗？能。现在该迁吗？不该。**
+
+- **现状成因**：这是从 koa2 时代演进来的项目，当时 CJS 是唯一稳妥选择，全部依赖与代码都是 `require`。
+  Node 22 对 ESM 支持已经很成熟，Koa 3 本身也不排斥 ESM —— 所以这不是"技术选型落后"，而是**历史成本**问题。
+- **迁移的真实成本（远不止把 `require` 换成 `import`）**：
+  1. `__dirname` / `__filename` 在 ESM 里不存在 → 要全换成 `import.meta.url` + `fileURLToPath`；
+     本项目在 logger、静态目录、模板目录、上传目录等多处用到；
+  2. ESM 是静态解析，`require()` 那种"条件加载/循环引用容错"要改成顶层 `await import()`；
+  3. **CJS 依赖互操作坑**：老包在 ESM 下往往只有 `default` 可用（`import pkg from 'x'` 而非 `import { f } from 'x'`），
+     本项目用了 `@koa/multer`、`koa-art-template`、`svg-captcha`、`koa-session` 等一批 CJS 包，要逐个踩；
+  4. 所有 `.js` 与测试文件都要动，`node --test` 的加载方式也要跟着调整；ESLint 配置同步改。
+- **收益评估**：ESM 的主要红利（tree-shaking、更现代的加载语义）**在服务端几乎没有收益** ——
+  tree-shaking 是前端打包才需要的东西；服务端只关心"能不能跑、好不好维护"。
+  而成本是"全项目回归 + 一堆依赖互操作坑"。**投入产出比不划算。**
+- **建议（真要迁的时候）**：
+  1. **现在不迁**，优先做前端分离（那是更高优先级的架构演进）；
+  2. 若将来要迁，**最好等前端分离之后**再动：那时 Koa 只剩 API 层，文件数大幅减少，迁移面最小；
+  3. 想小步试水：保持 `package.json` 为 CJS，只让**新建模块**用 `.mjs`，逐步验证依赖互操作。
+- **现在就能拿到的"类 ESM 收益"（零风险，值得做）**：
+  - 收紧 ESLint（禁隐式全局、强制 `const`、统一 `'use strict'`、规范 require 顺序）；
+  - 把"平台能力"从全局挪到显式依赖（本项目已做到：config/logger/store 都是显式 require）。
+  → 这些能拿到 ESM 带来的**大部分可维护性收益**，且不会引入回归。
+
 ### 相关文档
 - 前端框架选型与替换范围：**`docs/frontend-architecture.md`**
   （结论：Koa 收敛为纯 API + 前端独立 Next/Nuxt；`views`/`public` 按「前台层 / 后台层 / 用户数据」三层分别处理，
   `public/upload` 永不可直接删）
 
 ### 下一步（后端剩余待办）
-- **统计报表 SQL**：`GROUP BY` + 窗口函数 `ROW_NUMBER()` 做内容/访问排名（目前只用了 `LAG/LEAD` 取上下篇）
-- **`EXPLAIN` 执行计划**实战样例（配合 `docs/database-sql.md`）
+- **审计日志保留策略**（定期归档/清理，避免无上限增长）
+- **删除记录时清理上传文件**（或改用对象存储 + 生命周期规则）
+- **统一 `prevPage` 回跳走 `safeBackPath`**（SSR doEdit 的隐藏域，同一类开放重定向）
 - **上传上云**（OSS/S3）与 **部署工程化**（Dockerfile + pm2 + Nginx + CI）——用户已明确"暂不做，准备部署时再做"
 - **替换 ueditor**（前端相关，待前端方案确定）
 - **前端分离**：按 `docs/frontend-architecture.md` 的 Phase 1 新建 Next/Nuxt/Astro 前台，消费 `/api/v1/public/*`
+- （已完成）SQL 教学化全部收尾：JOIN / 递归 CTE / GROUP BY / 窗口函数 / 分组 TopN / 事务 / EXPLAIN

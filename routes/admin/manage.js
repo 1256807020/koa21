@@ -129,7 +129,6 @@ router.post('/doEdit', requirePermissionPageByTable('manage', 'update'), validat
 
 
 })
-router.get('/delete', async (ctx) => {
-  ctx.body = '删除用户'
-})
+// 说明：原来这里有个 `GET /delete` 占位路由（只返回文本"删除用户"），既不删数据也容易误导。
+// 真正的删除走 POST /admin/remove（带 CSRF + 权限点），已删除该占位。
 module.exports = router.routes()

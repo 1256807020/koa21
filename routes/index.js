@@ -44,10 +44,10 @@ router.get('/', async (ctx) => {
 router.get('/news', async (ctx) => {
   const pid = ctx.query.pid
   const page = Number(ctx.query.page) || 1
-  const pageSize = 3
+  const pageSize = config.frontend.pageSize
 
   // 新闻下面的二级分类（ID 沿用原教程数据）
-  const newsResult = await DB.find('articlecate', { pid: '5bdaf18de67d082570b10a23' })
+  const newsResult = await DB.find('articlecate', { pid: config.frontend.cateIds.news })
 
   let articleResult
   let articleNum
@@ -72,7 +72,7 @@ router.get('/news', async (ctx) => {
 
 // 服务列表
 router.get('/service', async (ctx) => {
-  const serviceList = await DB.find('article', { pid: '5bdaf17fe67d082570b10a22' })
+  const serviceList = await DB.find('article', { pid: config.frontend.cateIds.service })
   await ctx.render('default/service', {
     serviceList: serviceList
   })
@@ -118,10 +118,10 @@ router.get('/content/:id', async (ctx) => {
 router.get('/case', async (ctx) => {
   const pid = ctx.query.pid
   const page = Number(ctx.query.page) || 1
-  const pageSize = 3
+  const pageSize = config.frontend.pageSize
 
   // 成功案例下面的二级分类
-  const cateResult = await DB.find('articlecate', { pid: '5bdaf166e67d082570b10a21' })
+  const cateResult = await DB.find('articlecate', { pid: config.frontend.cateIds.case })
 
   let articleResult
   let articleNum

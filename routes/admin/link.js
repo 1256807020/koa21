@@ -3,6 +3,7 @@ const Router = require('@koa/router')
 const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
+const config = require('../../model/config.js')
 // multipart 表单的 CSRF 校验必须放在 multer 之后（multer 解析完 body 才有 _csrf 字段）
 const { csrfGuardPage } = require('../../middleware/guard')
 const { z, validatePageBody } = require('../../utils/validate')
@@ -18,9 +19,9 @@ const linkSchema = z.object({
 
 router.get('/', async (ctx) => {
   let page = ctx.query.page || 1;
-  let pageSize = 3;
+  let pageSize = config.adminPageSize;
 
-  let count = await DB.count('article', {});
+  let count = await DB.count('link', {}); // 修：原代码误用 article 表统计 → 分页总页数算错
   let result = await DB.find('link', {}, {}, {
     page, pageSize,
     sortJson: {

@@ -2,18 +2,28 @@
 // middleware/rateLimit.js
 // ============================================================
 // 全局请求限流（P2 · 可观测性 / 抗刷）
+//
+// 与 middleware/loginRateLimit.js 的区别：
+//   - 本文件：按 **IP** 统计"请求总次数"，目的是防接口被刷、保护服务端；
+//   - loginRateLimit：按 **账号** 统计"登录失败次数"，目的是防爆破 + 账号锁定。
+//   两者维度不同，互补。
+//
+// 存储：统一走 model/store.js —— 配了 Redis 就用 Redis（**多实例共享计数**），
+//       没配则自动降级为进程内 Map（单实例可用；多实例会各算一份，限额被放大 N 倍）。
+//
 // 教学点：
-//   1) 与 middleware/loginRateLimit.js 的区别：
-//      - loginRateLimit：**按账号**统计"登录失败次数"，目的是防爆破与账号锁定；
-//      - 本文件：**按 IP** 统计"请求总次数"，目的是防止接口被刷、被打爆（保护服务端）。
-//      两者维度不同，互补，可同时启用。
-//   2) 算法：固定窗口计数（实现最简单、够用）。更平滑可用"滑动窗口/令牌桶"（如 rate-limiter-flexible）。
-//   3) 存储：进程内 Map，**只适合单实例**；多实例/集群必须换 Redis（各实例计数不共享，
-//      否则 N 个实例等于把限额放大 N 倍）。
-//   4) 限流是"最后一道护栏"，不是安全边界：真正的安全还在鉴权/CSRF/RBAC。
+//   1) 固定窗口限流：把"窗口编号"拼进 key（`...:<floor(now/window)>`），
+//      这样不需要在自增后再去设置过期时间，天然没有"先 incr 再 expire"之间的竞态，
+//      也保证每个窗口都是全新的计数。
+//   2) 限流器故障要 **fail-open**：如果计数存储挂了，宁可放行也不要让全站 5xx。
+//      限流是"最后一道护栏"，不是安全边界——真正的安全在鉴权/CSRF/RBAC。
 // ============================================================
 const CODE = require('../utils/code')
 const { fail } = require('../utils/response')
+const createLogger = require('../model/logger')
+const store = require('../model/store')
+
+const log = createLogger('rateLimit')
 
 /**
  * 创建限流中间件
@@ -23,42 +33,32 @@ const { fail } = require('../utils/response')
  * @param {(ctx)=>boolean} [opts.skip] 返回 true 则跳过限流（如静态资源、健康检查）
  */
 function createRateLimit ({ windowMs = 60 * 1000, max = 300, skip } = {}) {
-  // key = 客户端 IP，value = { count, resetAt }
-  const hits = new Map()
-
-  // 周期性清理过期记录，避免 Map 无限增长（内存泄漏）。
-  // unref() 让定时器不阻止进程退出（很关键：否则优雅关闭/测试会挂住）。
-  const timer = setInterval(() => {
-    const now = Date.now()
-    for (const [key, rec] of hits) {
-      if (rec.resetAt <= now) hits.delete(key)
-    }
-  }, windowMs)
-  if (typeof timer.unref === 'function') timer.unref()
-
   return async function rateLimit (ctx, next) {
     if (typeof skip === 'function' && skip(ctx)) return next()
 
-    const key = ctx.ip || 'unknown'
-    const now = Date.now()
-    let rec = hits.get(key)
+    const ip = ctx.ip || 'unknown'
+    // 窗口编号：同一窗口内共享同一个 key，窗口一换 key 就变（旧 key 靠 TTL 自动回收）
+    const windowIndex = Math.floor(Date.now() / windowMs)
+    const key = `ratelimit:${ip}:${windowIndex}`
 
-    // 窗口过期则重置
-    if (!rec || rec.resetAt <= now) {
-      rec = { count: 0, resetAt: now + windowMs }
-      hits.set(key, rec)
+    let count
+    try {
+      count = await store.incr(key, windowMs)
+    } catch (err) {
+      // fail-open：计数存储不可用时放行，避免"限流器故障"升级成"全站不可用"
+      log.error(`限流计数失败，本次放行（${err.message}）`)
+      return next()
     }
-    rec.count += 1
 
+    const remaining = Math.max(0, max - count)
     // 把配额信息放进响应头，方便前端/网关感知（业界惯例）
     ctx.set('X-RateLimit-Limit', String(max))
-    ctx.set('X-RateLimit-Remaining', String(Math.max(0, max - rec.count)))
+    ctx.set('X-RateLimit-Remaining', String(remaining))
 
-    if (rec.count > max) {
-      const retryAfter = Math.max(1, Math.ceil((rec.resetAt - now) / 1000))
+    if (count > max) {
+      const retryAfter = Math.max(1, Math.ceil((windowMs - (Date.now() % windowMs)) / 1000))
       ctx.set('Retry-After', String(retryAfter))
       if (ctx.path.startsWith('/api')) {
-        // JSON 接口：统一 { code, message, data }，HTTP 429
         return fail(ctx, CODE.RATE_LIMIT, '请求过于频繁，请稍后再试', null, 429)
       }
       ctx.status = 429

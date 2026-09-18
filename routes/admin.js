@@ -5,6 +5,7 @@ let ueditor = require('../model/ueditor.js')
 let url = require('url')
 const config = require('../model/config.js')
 const { ensureCsrfToken, csrfGuardPage } = require('../middleware/guard')
+const { auditLog } = require('../middleware/auditLog')
 
 // 路由级守卫采用「默认保护、例外显式列出」：
 //   - /admin/editorUpload：富文本编辑器上传走自有协议（不带 _csrf），暂豁免；
@@ -60,10 +61,14 @@ router.use(async (ctx, next) => {
   }
   await next()
 })
+// —— 审计埋点：包住**全部**后台路由（SSR 表单 + AJAX 批量端点）——
+// 放在这一层而不是各 handler 里，是为了"默认全记"，避免以后新增接口忘了埋点。
+// 注意它必须在上面那个 router.use 之后：未登录请求会在上一层就被重定向，不会走到这里。
+router.use(auditLog)
+
 // 引入模块
 let index = require('./admin/index.js')
 let login = require('./admin/login.js')
-let user = require('./admin/user.js')
 let manage = require('./admin/manage.js')
 let articlecate = require('./admin/articlecate.js')
 let article = require('./admin/article.js')
@@ -74,7 +79,9 @@ let setting = require('./admin/setting.js')
 // 匹配了上面的路由，就加载模块
 router.use(index)
 router.use('/login', login)
-router.use('/user', user)
+// 说明：原 `router.use('/user', ...)` 已删除 —— /admin/user 是教学遗留的空壳模块
+//（edit/delete 只返回占位文本，list/add 渲染无数据源的静态样板，全站无任何链接引用），
+// 真正的"用户管理"是 /admin/manage（对应 admin 表）。
 router.use('/manage', manage)
 router.use('/articlecate', articlecate)
 router.use('/article', article)
@@ -84,5 +91,9 @@ router.use('/nav', nav)
 router.use('/setting', setting)
 // 富文本编辑器上传接口（自研实现，见 model/ueditor.js）
 // 保存到 public/upload/{yyyy}{mm}{dd}/ 下，返回 URL 给编辑器插入
-router.all('/editorUpload', ueditor())
+// ⚠️ 只开放真正需要的两种方法：GET 拉配置、POST 上传。
+//    原来用 router.all() 会连 TRACE / ACL / MKCALENDAR 等 40 多种 HTTP 方法一起注册，
+//    既是无谓攻击面，也让接口清单噪音极大（属"顺手清理"）。
+router.get('/editorUpload', ueditor())
+router.post('/editorUpload', ueditor())
 module.exports = router.routes()

@@ -19,12 +19,14 @@
 | 会话 | koa-session（cookie session，httpOnly + signed） |
 | 模板 | koa-art-template + art-template（服务端渲染） |
 | 数据库 | PostgreSQL 18（驱动 `pg`） |
+| 缓存 / 限流存储 | Redis（驱动 `redis`，可选；未配置则自动降级为进程内存储） |
 | 静态服务 | koa-static |
 | 跨域 | @koa/cors（仅对 `/api` 开放） |
 | 鉴权/安全 | bcryptjs（密码哈希）、svg-captcha（登录验证码）、sanitize-html（富文本 XSS 净化） |
 | 上传 | @koa/multer + multer（本地磁盘 `public/upload`） |
 | 日志 | log4js |
 | 后台 UI | jQuery + Ace Admin 1.x 模板 |
+| 模块规范 | **CommonJS（`require`）** —— 历史项目演进所致；为何暂不迁 ESM、何时适合迁，见 [`docs/dev-notes.md`](docs/dev-notes.md) 阶段八 8.5 |
 | 前台交互 | jQuery + Swiper |
 | 包管理 | pnpm（依赖锁定精确版本，见 `.npmrc` 的 `save-exact=true`） |
 
@@ -114,6 +116,15 @@ pnpm dev          # 默认 http://localhost:3000
 | `SITE_PROTOCOL` `SITE_HOST` | 站点地址（留空则按请求头自动推导 `__HOST__`） |
 | `UPLOAD_DIR` `UPLOAD_MAX_SIZE` | 上传目录 / 大小上限 |
 | `TRUST_PROXY` | 是否位于 Nginx 等反代之后（生产 `true`） |
+| `REDIS_URL` | Redis 连接串（如 `redis://127.0.0.1:6379`）。**留空 = 不启用**，自动降级为进程内存储；多实例部署必须配置 |
+| `REDIS_KEY_PREFIX` | Redis 键前缀（便于多环境共用一个实例，如 `koa21:dev:`） |
+| `PERMISSION_CACHE_TTL` `SESSION_CACHE_TTL` | 权限缓存（默认 30s）/ 会话复核缓存（默认 10s）的 TTL，单位毫秒 |
+| `RATE_LIMIT_WINDOW_MS` `RATE_LIMIT_MAX` | 全局限流窗口与上限（只罩 `/api` 与 `/admin`） |
+| `FRONTEND_PAGE_SIZE` `ADMIN_PAGE_SIZE` | 前台 / 后台列表每页条数 |
+| `FRONTEND_CATE_*` | 前台三个一级分类 ID（须与 `db/seed.sql` 一致，一般不用改） |
+
+> Redis 未配置或连接失败时，服务**照常启动**，只是把"限流计数/权限缓存/会话复核缓存"放在各进程内存里。
+> `/healthz` 会返回 `cache` 字段（`redis` / `memory`），可直接看出当前走的是哪种。
 
 ## 八、数据库（表）
 
@@ -150,7 +161,7 @@ pnpm dev          # 默认 http://localhost:3000
 | `/api/v1/public/categories` | GET | 分类树（**递归 CTE**，任意层级嵌套） |
 | `/api/v1/public/articles` | GET | 文章列表（分页 / `cateId` 含子孙分类 / `keyword`；**不含 content**） |
 | `/api/v1/public/articles/:id` | GET | 文章详情 + 上下篇（**窗口函数 LAG/LEAD**） |
-| `/api/v1/catelist`、`/api/v1/newslist` | GET | 旧公开接口（保留兼容） |
+| `/api/v1/catelist`、`/api/v1/newslist` | GET | **旧公开接口（deprecated，仅兼容保留）**：已统一响应信封、只返回 `status=1`、字段白名单、分页可传 `pageSize`；新代码请用 `/api/v1/public/*` |
 
 **后台接口（需登录 + CSRF；写操作还需权限点）**
 
@@ -165,6 +176,17 @@ pnpm dev          # 默认 http://localhost:3000
 | `/api/v1/admin/rbac/roles/:roleId/permissions` | GET / POST | `role:list` / `role:assign` |
 | `/api/v1/admin/audit/list` | GET | `audit:list` |
 | `/api/v1/csrf-token` | GET | 签发 CSRF token（双提交 Cookie） |
+
+**统计报表接口（SQL 教学，需 `stats:view`）**
+
+| 接口 | 方法 | 说明 |
+|---|---|---|
+| `/api/v1/admin/stats/overview` | GET | 内容概览与状态分布（`COUNT(*) FILTER`） |
+| `/api/v1/admin/stats/categories` | GET | 分类排行（`GROUP BY` + 窗口函数：ROW_NUMBER/RANK/DENSE_RANK + 占比 + **累计占比**） |
+| `/api/v1/admin/stats/top-articles?limit=2` | GET | 每个分类最新 N 篇（**分组 TopN**：`PARTITION BY` + `ROW_NUMBER`） |
+| `/api/v1/admin/stats/monthly?months=12` | GET | 按月发文趋势（`date_trunc` + `GROUP BY 1`） |
+| `/api/v1/admin/stats/explain/queries` | GET | 可 EXPLAIN 的查询清单（白名单） |
+| `/api/v1/admin/stats/explain?query=<key>` | GET | 执行计划分析（`EXPLAIN ANALYZE`，**只接受白名单键**） |
 
 `resource` 当前支持 `manage`（=管理员表 `admin`）与 `article`。
 
@@ -185,21 +207,37 @@ pnpm dev          # 默认 http://localhost:3000
 - **反向代理**：Nginx 前置，设 `TRUST_PROXY=true`，SSL 终止在 Nginx，Cookie `secure`。
 - **静态资源 / 上传**：当前上传存本地 `public/upload`；多实例/对象存储场景应迁移到 OSS/S3。
 - **健康检查**：已提供 `GET /healthz`（探活只查 DB）。
-- **限流**：`middleware/rateLimit.js` 按 IP 限流（只罩 `/api` 与 `/admin`）；**多实例部署需把存储换成 Redis**，否则限额会被放大 N 倍。
+- **限流**：`middleware/rateLimit.js` 按 IP 限流（只罩 `/api` 与 `/admin`）。
+- **Redis**：限流计数 / 权限缓存 / 会话复核缓存的共享存储。**多实例部署请配置 `REDIS_URL`**；
+  未配置时自动降级为进程内存储（单实例可用），`GET /healthz` 的 `cache` 字段（`redis`/`memory`）可直接确认。
 
 ## 十一、安全现状
 
 **已具备（做得好的部分）**
 
 - SQL 全部参数化（`model/db.js`）+ 表名/字段名白名单（`assertIdent`），**从根上杜绝 SQL 注入**。
-- 密码 bcrypt 哈希存储；验证码一次性。
-- 全局异常兜底 + 访问日志；生产环境隐藏内部错误。
-- session：`httpOnly` + `signed` + `sameSite`。
+- 密码 bcrypt 哈希存储；验证码一次性（且 SVG 路径化 + `httpOnly` 会话，前端读不出验证码）。
+- RBAC 权限点（`资源:动作`）+ 操作审计日志（**入库前脱敏**）。
+- 全局异常兜底 + 访问日志 + `/healthz` + 按 IP 限流；生产环境隐藏内部错误。
+- session：`httpOnly` + `signed` + `sameSite`，且**只存最小字段**（不再放 password 哈希）。
 
-**仍存在的风险（见改造计划 P0）**
+**已完成的安全改造（原风险已闭环）**
 
-- 后台删除走 `GET /admin/remove?collectionName=表&id=`（CSRF 零成本 + 表名可控）。
-- 全站无 CSRF 防护；上传无文件类型白名单；前台富文本 `{{@content}}` 不过滤（存储型 XSS）；登录无限流；验证码明文落日志。
+- ✅ 写操作全部 **POST + CSRF + 表名白名单**（原 `GET /admin/remove?collectionName=表` 已下线，旧 GET 返回 405）
+- ✅ 上传类型白名单（扩展名 + MIME 双校验，移除 SVG）+ 静态资源 `X-Content-Type-Options: nosniff`
+- ✅ 富文本**入库前** XSS 净化（白名单），覆盖 SSR 与 JSON API 两条路径
+- ✅ 登录失败限流/锁定（同账号 5 次锁 15 分钟）；验证码明文日志已删；生产 `COOKIE_SECURE=true`
+- ✅ **会话复核**：账号被删除/禁用后旧会话立即失效；改角色无需重新登录
+- ✅ **开放重定向防护**（`utils/redirect.js` 的 `safeBackPath`，只允许站内相对路径）
+- ✅ 参数非法返回 **400**（原来是 500）；未知资源 404 而非 403
+
+**仍需注意**
+
+- 限流计数、权限缓存、会话复核缓存**默认走 Redis**（`REDIS_URL`）；**未配置时会降级为进程内存储**——
+  单实例开发没问题，多实例部署务必配置（否则限额各算各的、权限变更最长 30s 才全局一致）。`/healthz` 的 `cache` 字段可确认。
+- 删除记录**不会**同时删除 `public/upload` 里的文件；`audit_log` 无上限增长（需归档策略）。
+- 后台 SSR `doEdit` 表单的 `prevPage` 隐藏域仍可被伪造（同类开放重定向，风险低于 Referer 场景，待统一走 `safeBackPath`）。
+- 生产部署前务必修改默认密码（`admin/123456`）与 `SESSION_KEY`。
 
 ## 十二、改造计划与待办（Roadmap）
 
@@ -238,9 +276,15 @@ pnpm dev          # 默认 http://localhost:3000
 
 ## 十三、已知问题
 
-- 后台部分删除入口为占位（`manage.js` 的 `/delete` 仅返回 '删除用户'），实际删除依赖 `remove` 路由，且为 GET 方式、表名可控（见 P0）。
-- 系统设置中"网站地址"为种子数据值，生产请在前台设置页修改。
-- 后台管理 UI 为老版 Ace Admin（jQuery 时代），交互与可维护性落后于现代框架，建议按 P0 JSON API 完成后升级。
+> 原"后台删除为 GET + 表名可控（最危）"问题已修复（见第十一章）；以下为**当前**仍存在、但已知并接受的问题。
+
+- **删除记录不清理上传文件**：删文章后 `public/upload` 里的图片仍保留 → 需要"删除时清理"或对象存储生命周期规则。
+- **`audit_log` 无上限增长**：需要归档/清理策略（例如保留 90 天）。
+- **缓存后端降级**：若未配置 `REDIS_URL`（或 Redis 连不上），限流计数/权限缓存/会话复核会退回**进程内实现** —
+  单实例无碍，多实例会出现"限额被放大 N 倍、权限变更最长 30s 才一致"。`/healthz` 的 `cache` 字段可确认当前后端。
+- **SSR `doEdit` 的 `prevPage` 回跳**仍可被伪造（同类开放重定向，风险低于 Referer 场景，待统一走 `safeBackPath`）。
+- 系统设置中"网站地址"为种子数据值，生产请在后台设置页修改。
+- 后台管理 UI 为老版 Ace Admin（jQuery 时代），交互与可维护性落后于现代框架；JSON API（`/api/v1/admin/*`）已就绪，可直接对接现代前端。
 
 ---
 
@@ -275,6 +319,10 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] 前端架构演进方案 `docs/frontend-architecture.md`（Next.js/Nuxt/Astro 选型 + 替换范围逐目录界定 + 分阶段路线 + §9 九条方案清单供比较）
 - [x] 后端批次（接口规范 + 可观测性）：API 版本化 `/api/v1`、统一响应体固化、session 瘦身、`/healthz`、全局限流、测试套件（`node:test` 26 项）
 - [x] 后端批次（权限与内容）：**RBAC**（role/permission/role_permission + 内置三角色 + `requirePermission` 中间件）、**操作审计日志**（audit_log + 埋点 + 脱敏 + 查询接口）、**`/api/v1/public/*` 公开内容 API**、**zod 覆盖 SSR 表单**、**OpenAPI 自动生成**；测试套件扩到 **42 项**
+- [x] **Redis 接入**：`model/store.js` 统一缓存/计数存储（Redis 优先，未配置或连不上自动降级进程内）；限流计数、权限缓存、会话复核缓存全部迁移；`/healthz` 暴露 `cache` 字段；测试套件扩到 **54 项**
+- [x] **SQL 教学化收尾**：统计报表（`GROUP BY` / 窗口函数 / 分组 TopN / 累计占比）与 `EXPLAIN` 执行计划分析接口 + 文档
+- [x] **第二轮全量审计与整改**（先程序化枚举出 **150 条路由**再测，脚本 60 项断言 + agent-browser 真实浏览器）：修复 11 个问题 —— **SSR 后台写操作完全不进审计**、**`/admin/editorUpload` 绕过上传白名单（且能传 zip/rar/doc = 任意文件托管）**、`uploadvideo` 逻辑 bug、3 个未鉴权空壳写接口、`newslist` 不过滤 `status` 导致**下架内容外泄**、`catelist` 返回整表原始行、`pageSize` 硬编码、**GET 登出可被跨站触发**、死模块 `/admin/user`、`router.all` 注册 40+ HTTP 方法；测试套件扩到 **68 项**
+- [x] **接口全矩阵审计与整改**（脚本 33 项断言 + agent-browser 真实浏览器验证）：修复 9 个真实问题 —— 非法 id 返回 500、未知资源 403、可绑定不存在角色、**账号删除后旧会话仍有效**、**开放重定向**、分页统计用错表、校验结果被无声覆盖、删除产生孤儿数据/可删掉最后一个管理员、硬编码（分类 ID 与 pageSize）；测试套件扩到 **48 项**
 
 ### 待办 — P0 安全（上线前必修）
 - [x] 删除接口重构：`GET /admin/remove?collectionName=表&id=` → `POST /api/admin/:resource/:id/delete`（已落地：真正调用 `DB.remove`、参数化防注入；CSRF token 已补，权限校验见 P1 RBAC）【已完成 endpoint + CSRF】
@@ -314,11 +362,11 @@ pnpm dev          # 默认 http://localhost:3000
 ### 待办 — SQL 教学化（贯穿各批次，把基础/进阶/高级用上）
 - [x] 后台列表 JOIN 替代冗余 catename + 消灭 N+1（`services/articleService.list` 用 `LEFT JOIN articlecate` 取 `cate_name`）【已完成】
 - [x] 树形分类 `WITH RECURSIVE` 递归 CTE：`contentService.getCategoryTree()` 一次查出整棵树；`listArticles({cateId})` 用递归子树实现"含所有子孙分类"的筛选【已完成】
-- [ ] 统计报表 `GROUP BY` + 窗口函数 `ROW_NUMBER()`【部分完成】已用窗口函数 `LAG/LEAD` 取文章上下篇（`contentService.getArticle`）；`GROUP BY` 统计报表与 `ROW_NUMBER()` 排名待做
+- [x] 统计报表 `GROUP BY` + 窗口函数：`statsService` 提供 `COUNT(*) FILTER` 多维统计、`GROUP BY` + `date_trunc` 按月趋势、`ROW_NUMBER/RANK/DENSE_RANK` 三种排名 + 占比 + **累计占比**（帕累托）、`PARTITION BY` + `ROW_NUMBER` **分组 TopN**；另有 `LAG/LEAD` 取文章上下篇（`contentService.getArticle`）【已完成】
 - [x] 分页 / 模糊搜索 / **事务** 实战样例：【已完成】分页与 `ILIKE` 模糊搜索见 `contentService`、`articleService`；事务见 `rbacService.setRolePermissions`（清空+写入原子化）与 `removeRole`（删关联+删角色原子化）
 - [x] 物理外键 + 级联删除（教学对比）：`role_permission` **故意不加外键**，导致删角色必须自己在事务里先删关联行——这正是"有外键 vs 无外键"的活教材（见 `rbacService.removeRole` 注释与 `docs/database-sql.md`）【已完成（教学对比）】
 - [x] 多对多中间表：`role_permission`（角色 ↔ 权限点）就是标准多对多中间表实现，含唯一索引防重复授权【已完成】
-- [ ] `EXPLAIN` 执行计划分析样例（代码注释 + 文档）【持续】
+- [x] `EXPLAIN` 执行计划分析：`GET /api/v1/admin/stats/explain?query=<白名单键>`（`EXPLAIN ANALYZE, BUFFERS, FORMAT JSON`，**只接受白名单键，绝不执行客户端传来的 SQL**）；`docs/database-sql.md` 补了"怎么读 EXPLAIN"对照表【已完成】
 
 ---
 

@@ -147,7 +147,8 @@ INSERT INTO permission (code, name, grp, sort) VALUES
   ('link:delete',      '删除友情链接', 'content', 30),
   ('setting:list',     '查看站点设置', 'site', 31),
   ('setting:update',   '修改站点设置', 'site', 32),
-  ('upload:create',    '上传文件',     'site', 33)
+  ('upload:create',    '上传文件',     'site', 33),
+  ('stats:view',       '查看统计报表', 'sys', 34)
 ON CONFLICT (code) DO NOTHING;
 
 -- ---------------- 角色-权限映射 ----------------

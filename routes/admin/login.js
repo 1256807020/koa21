@@ -26,7 +26,7 @@ router.post('/doLogin', async (ctx) => {
 
   // —— P0 安全：登录失败限流 / 账户锁定 ——
   // 先查锁定：被锁期间直接拒绝，连验证码都不用校验，省资源也堵爆破
-  const lock = checkLock(username)
+  const lock = await checkLock(username)
   if (lock) {
     log.warn(`登录被锁定（账户=${username}）：还需 ${lock.retryAfter}s`)
     return await loginError(ctx, `尝试次数过多，账户已临时锁定，请 ${Math.ceil(lock.retryAfter / 60)} 分钟后再试`)
@@ -45,14 +45,14 @@ router.post('/doLogin', async (ctx) => {
       if (matched && Number(result[0].status) !== 1) {
         // 账号存在、密码对，但已被禁用 → 必须在这里就拦住（不能只靠后续接口的 requireLogin 复核）
         log.warn(`登录失败（账号已禁用）：${username}`)
-        onFailure(username)
+        await onFailure(username)
         await ctx.render('admin/error', {
           message: '该账号已被禁用，请联系管理员',
           redirect: ctx.state.__HOST__ + '/admin/login'
         })
       } else if (matched) {
         log.info(`管理员登录成功：${username}`)
-        onSuccess(username)        // P0 安全：登录成功 → 清零失败计数
+        await onSuccess(username)  // P0 安全：登录成功 → 清零失败计数
         ctx.session.code = null   /* 验证码一次性使用 */
         // P1 安全 · session 瘦身：
         // 原来是把整行 admin（含 password 哈希、add_time 等）塞进会话。
@@ -77,7 +77,7 @@ router.post('/doLogin', async (ctx) => {
         ctx.redirect(ctx.state.__HOST__ + '/admin')
       } else {
         log.warn(`登录失败（账号或密码错误）：${username}`)
-        onFailure(username)        // P0 安全：失败计数 +（达阈值）锁定
+        await onFailure(username)        // P0 安全：失败计数 +（达阈值）锁定
         ctx.render('admin/error', {
           message: '用户名或者密码错误',
           redirect: ctx.state.__HOST__ + '/admin/login'
@@ -85,7 +85,7 @@ router.post('/doLogin', async (ctx) => {
       }
     } else {
       log.warn(`登录失败（账号不存在）：${username}`)
-      onFailure(username)          // P0 安全：即使账号不存在也计数，防枚举
+      await onFailure(username)          // P0 安全：即使账号不存在也计数，防枚举
       ctx.render('admin/error', {
         message: '用户名或者密码错误',
         redirect: ctx.state.__HOST__ + '/admin/login'
@@ -93,7 +93,7 @@ router.post('/doLogin', async (ctx) => {
     }
   } else {
     log.warn(`登录失败（验证码错误）：${username}`)
-    onFailure(username)            // P0 安全：验证码错也算一次尝试
+    await onFailure(username)            // P0 安全：验证码错也算一次尝试
     ctx.render('admin/error', {
       message: '验证码失败',
       redirect: ctx.state.__HOST__ + '/admin/login'
@@ -130,8 +130,24 @@ router.get('/code', async (ctx) => {
   ctx.response.type = 'image/svg+xml';
   ctx.body = captcha.data;
 })
+// 登出（P0 安全）
+// 登出会改变登录态，属于"状态变更"操作，必须防 CSRF ——
+// 否则攻击者只要在任意页面塞一张 `<img src="/admin/login/loginOut">`，
+// 就能把正在浏览的已登录管理员**强制踢下线**（拒绝服务，且可反复触发）。
+// 因为它是导航栏里的 <a> 链接（GET），带不了请求体/自定义头，所以把 token 放 query 上。
+// 双提交 Cookie 模式下这样是安全的：跨站攻击者读不到受害者的 csrfToken Cookie，拼不出这个链接。
 router.get('/loginOut', async (ctx) => {
-  ctx.session.userinfo = null;
-  ctx.redirect(ctx.state.__HOST__ + '/admin/login');
+  const cookie = ctx.cookies.get('csrfToken')
+  const token = String(ctx.query._csrf || '')
+  if (!cookie || !token || cookie !== token) {
+    ctx.status = 403
+    return ctx.render('admin/error', {
+      message: 'CSRF 校验失败，无法退出登录',
+      redirect: (ctx.state.__HOST__ || '') + '/admin'
+    })
+  }
+  // 彻底销毁会话（而不是只把 userinfo 置空）：避免残留的会话数据被后续请求复用
+  ctx.session = null
+  ctx.redirect(ctx.state.__HOST__ + '/admin/login')
 })
 module.exports = router.routes()

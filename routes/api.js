@@ -6,12 +6,18 @@ const Router = require('@koa/router')
 // 这样做的原因：若在这里写死 prefix:'/api'，就无法再挂到 /api/v1 下（会变成 /api/v1/api/...）。
 // 内部嵌套（adminApi）仍保持相对路径，前缀完全由外层决定。
 const router = new Router()
-var DB = require('../model/db.js');
+const DB = require('../model/db.js')
 const { buildSpec } = require('../utils/openapi')
+const { ok } = require('../utils/response')
+const { handle } = require('../utils/handle')
+const { parse, pageSchema } = require('../utils/validate')
+const { issueCsrfToken } = require('../middleware/guard')
 
-// API 根：给出一份"我能提供什么"的索引，替代原来的一行文本
-router.get('/', async (ctx) => {
-  ctx.body = {
+// API 根：给出一份"我能提供什么"的索引。
+// 统一走 ok()（{code,message,data}），不再是个裸对象 —— 否则同一个 API 空间里
+// 又出现"第二套响应格式"，前端要写两套解析。
+router.get('/', (ctx) => {
+  ok(ctx, {
     name: 'Koa CMS API',
     version: 'v1',
     docs: '/api/v1/docs',
@@ -20,9 +26,10 @@ router.get('/', async (ctx) => {
       public: '/api/v1/public/*',
       admin: '/api/v1/admin/*',
       rbac: '/api/v1/admin/rbac/*',
-      audit: '/api/v1/admin/audit/list'
+      audit: '/api/v1/admin/audit/list',
+      stats: '/api/v1/admin/stats/*'
     }
-  }
+  })
 })
 
 // OpenAPI 规范（自动生成：请求 schema 来自 utils/schemas.js，用 z.toJSONSchema 转换）
@@ -57,90 +64,55 @@ router.get('/docs', (ctx) => {
 </body>
 </html>`
 })
-router.get('/catelist', async (ctx) => {
 
-  var result = await DB.find('articlecate', {})
+// ============================================================
+// 旧公开接口（deprecated，仅为兼容保留）
+//
+// 本轮修复的三个问题（都是"历史遗留"带来的真实隐患）：
+//   ① **不过滤 status** → 已下架的文章/分类会从公开接口漏出去（数据泄露）；
+//   ② 响应体是自成一派的 `{ result }`，与全站统一信封 `{ code, message, data }` 不一致；
+//   ③ `pageSize` 写死 5、字段直接 SELECT *（把 add_time 等内部字段也吐出去）。
+// 新代码请直接用 `/api/v1/public/categories` 与 `/api/v1/public/articles`
+//（分类树 / 分页 / 关键词 / 字段白名单都更完整）。
+// ============================================================
+const DEPRECATED_HINT = 'deprecated：请改用 /api/v1/public/*'
 
-  //console.log(result);
-  ctx.body = {
-    result: result
-  };
-})
+router.get('/catelist', handle(async (ctx) => {
+  ctx.set('Deprecation', 'true')
+  const list = await DB.find('articlecate', { status: 1 },
+    { _id: 1, title: 1, pid: 1, sort: 1 },
+    { sortJson: { sort: 1 } })
+  ok(ctx, { list, hint: DEPRECATED_HINT })
+}))
 
+router.get('/newslist', handle(async (ctx) => {
+  ctx.set('Deprecation', 'true')
+  const { page, pageSize } = parse(pageSchema, ctx.query)
+  const where = { status: 1 } // 只返回已发布内容（修复"下架文章被公开接口读走"）
+  const list = await DB.find('article', where,
+    { _id: 1, title: 1, img_url: 1, description: 1, add_time: 1 },
+    { page, pageSize, sortJson: { add_time: -1 } })
+  const total = await DB.count('article', where)
+  ok(ctx, { list, total, page, pageSize, hint: DEPRECATED_HINT })
+}))
 
-router.get('/newslist', async (ctx) => {
-
-  var page = ctx.query.page || 1;
-
-  var pageSize = 5
-
-  var result = await DB.find('article', {}, { '_id': 1, "title": 1 }, {
-    page,
-    pageSize
-  })
-
-  //console.log(result);
-  ctx.body = {
-    result: result
-  };
-})
-//增加购物车数据
-router.post('/addCart',async (ctx)=>{
-
-  //接收客户端提交的数据 、主要做的操作就是增加数据
-
-  console.log(ctx.request.body);
-
-
-
-  ctx.body={
-      "success":true,
-      "message":'增加数据成功'
-  };
-
-})
-
-//修改用餐人数的接口
-router.put('/editPeopleInfo',async (ctx)=>{
-
-  //接收客户端提交的数据 、主要做的操作就是修改数据
-  console.log(ctx.request.body);
-  ctx.body={
-      "success":true,
-      "message":'修改数据成功'
-  };
-})
-
-//用于删除数据源
-router.delete('/deleteCart',async (ctx)=>{
-
-  //接收客户端提交的数据 、主要做的操作就是删除数据的操作
-  console.log(ctx.query);
-
-  ctx.body={
-      "success":true,
-      "message":'删除数据成功'
-  };
-
-
-
-})
-// 后台管理 JSON API（P0 底座）：/api/admin/* 统一返回 { code, message, data }
-// 鉴权(登录态 / CSRF / RBAC) 在阶段三补；本阶段先打通"能用 + 参数化防注入 + 统一出参"
+// ============================================================
+// 后台管理 JSON API 子路由
+// 鉴权：requireLogin（登录态）+ csrfGuard（写请求）+ RBAC 权限点，统一 {code,message,data}
 // adminApi 相对路由 /:resource/*，叠加上面的 '/admin' 与外层的 '/api' → 最终 /api/admin/:resource/*
 // 因为外层挂了两次，它同时也有 /api/v1/admin/:resource/*（版本化，见 app.js）
 // 注意路径！本文件在 routes/ 目录，JSON API 子路由在 routes/api/admin.js，
 // 所以必须写 require('./api/admin')；若写成 require('./admin') 会误加载 routes/admin.js（SSR 后台路由）！
 // 这个路径写错曾导致 404 长达数小时（详见 docs/dev-notes.md 阶段二踩坑 C）。
+// ============================================================
 const publicApi = require('./api/public') // 公开内容 API（无需登录，前端分离后的数据源）
 const rbacApi = require('./api/rbac')     // RBAC：角色/权限点/当前登录者权限
 const auditApi = require('./api/audit')   // 审计日志查询
+const statsApi = require('./api/stats')   // 统计报表 + EXPLAIN（SQL 教学）
 const adminApi = require('./api/admin')   // 资源驱动 CRUD
 
 // 签发 CSRF token 的端点：前端登录后调一次，拿到 token 写进 X-CSRF-Token 头再发写请求
 // （双提交 Cookie 模式：本接口把 token 同时种进可读 Cookie，前端读 Cookie 回传即可）
-const { ok } = require('../utils/response')
-const { issueCsrfToken } = require('../middleware/guard')
 router.get('/csrf-token', (ctx) => {
   const token = issueCsrfToken(ctx)
   ok(ctx, { token })
@@ -152,10 +124,12 @@ router.get('/csrf-token', (ctx) => {
 //   /api/v1/public/articles       公开内容
 //   /api/v1/admin/rbac/me         RBAC
 //   /api/v1/admin/audit/list      审计
+//   /api/v1/admin/stats/overview  统计
 //   /api/v1/admin/article/list    资源驱动 CRUD（adminApi 内部是相对路由 /:resource/*）
 router.use('/public', publicApi)
 router.use('/admin/rbac', rbacApi)
 router.use('/admin/audit', auditApi)
+router.use('/admin/stats', statsApi)
 router.use('/admin', adminApi)
 
 module.exports = router.routes()

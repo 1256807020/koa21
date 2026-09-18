@@ -89,6 +89,32 @@ const config = {
   rateLimit: {
     windowMs: num(process.env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
     max: num(process.env.RATE_LIMIT_MAX, 300)
+  },
+
+  // 前台展示配置：把原先散落在 routes/index.js 里的"魔法值"集中到一处，并支持 env 覆盖。
+  // cateIds 必须与 db/seed.sql 里的一级分类 _id 一致（种子数据是这些 ID 的最终来源）。
+  frontend: {
+    cateIds: {
+      case: str(process.env.FRONTEND_CATE_CASE, '5bdaf166e67d082570b10a21'), // 成功案例
+      service: str(process.env.FRONTEND_CATE_SERVICE, '5bdaf17fe67d082570b10a22'), // 服务
+      news: str(process.env.FRONTEND_CATE_NEWS, '5bdaf18de67d082570b10a23') // 新闻
+    },
+    pageSize: num(process.env.FRONTEND_PAGE_SIZE, 3)
+  },
+
+  // 后台列表每页条数（原代码在多个路由里硬编码 3，既是重复也是"改一处漏三处"的隐患）
+  adminPageSize: num(process.env.ADMIN_PAGE_SIZE, 10),
+
+  // Redis：限流计数、权限缓存、会话复核缓存的共享存储（见 model/store.js）
+  // REDIS_URL 留空 = 不启用 Redis，自动降级为进程内存储（单实例开发够用）
+  // ⚠️ 多实例部署必须配置，否则每台机器的限额/缓存各算一份
+  redis: {
+    url: str(process.env.REDIS_URL, ''),
+    keyPrefix: str(process.env.REDIS_KEY_PREFIX, 'koa21:'),
+    connectTimeout: num(process.env.REDIS_CONNECT_TIMEOUT, 3000),
+    // 缓存 TTL（毫秒），可按需调整
+    permissionTtlMs: num(process.env.PERMISSION_CACHE_TTL, 30 * 1000),
+    sessionTtlMs: num(process.env.SESSION_CACHE_TTL, 10 * 1000)
   }
 }
 

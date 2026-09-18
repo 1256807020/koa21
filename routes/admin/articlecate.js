@@ -63,7 +63,6 @@ router.post('/doEdit', requirePermissionPageByTable('articlecate', 'update'), va
   })
   ctx.redirect(ctx.state.__HOST__ + '/admin/articlecate')
 })
-router.get('/delete', async (ctx) => {
-  ctx.body = '删除用户'
-})
+// 说明：原来这里有个 `GET /delete` 占位路由（只返回文本"删除用户"），已删除。
+// 真正的删除走 POST /admin/remove（带 CSRF + 权限点 + 子分类/文章占用校验）。
 module.exports = router.routes()

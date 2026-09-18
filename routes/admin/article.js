@@ -3,6 +3,7 @@ const Router = require('@koa/router')
 const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
+const config = require('../../model/config.js')
 const { sanitizeArticle } = require('../../utils/sanitize')
 // multipart 表单的 CSRF 校验必须放在 multer 之后（multer 解析完 body 才有 _csrf 字段）
 const { csrfGuardPage } = require('../../middleware/guard')
@@ -30,7 +31,7 @@ router.get('/', async (ctx) => {
   // 先查询数据库
   // 获取页数，每页几条
   let page = ctx.query.page || 1;
-  let pageSize = 3;
+  let pageSize = config.adminPageSize;
   //查询总数量
   let count = await DB.count('article', {});
   // console.log(count)

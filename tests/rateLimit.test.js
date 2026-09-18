@@ -56,20 +56,20 @@ test('全局限流：skip 返回 true 的请求（如静态资源/healthz）不�
   }
 })
 
-test('登录限流：连续失败达阈值后锁定，成功后立即解锁', () => {
+test('登录限流：连续失败达阈值后锁定，成功后立即解锁', async () => {
   const user = `test_user_${Date.now()}`
-  for (let i = 0; i < loginLimit.MAX_FAILS; i++) loginLimit.onFailure(user)
+  for (let i = 0; i < loginLimit.MAX_FAILS; i++) await loginLimit.onFailure(user)
 
-  const lock = loginLimit.checkLock(user)
+  const lock = await loginLimit.checkLock(user)
   assert.ok(lock && lock.locked, `连续 ${loginLimit.MAX_FAILS} 次失败后必须锁定`)
   assert.ok(lock.retryAfter > 0, '应给出 retryAfter（秒）')
 
-  loginLimit.onSuccess(user)
-  assert.equal(loginLimit.checkLock(user), null, '登录成功后必须解锁')
+  await loginLimit.onSuccess(user)
+  assert.equal(await loginLimit.checkLock(user), null, '登录成功后必须解锁')
 })
 
-test('登录限流：未达阈值不锁定', () => {
+test('登录限流：未达阈值不锁定', async () => {
   const user = `test_user_under_${Date.now()}`
-  loginLimit.onFailure(user)
-  assert.equal(loginLimit.checkLock(user), null)
+  await loginLimit.onFailure(user)
+  assert.equal(await loginLimit.checkLock(user), null)
 })

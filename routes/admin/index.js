@@ -10,6 +10,7 @@ let DB = require('../../model/db')
 const { csrfGuardPage, csrfGuard } = require('../../middleware/guard')
 const { requirePermissionPage } = require('../../middleware/rbac')
 const rbac = require('../../services/rbacService')
+const { safeBackPath } = require('../../utils/redirect')
 
 /**
  * SSR 专用：权限点由 body 里的 collectionName（表名）+ 动作拼出来。
@@ -35,9 +36,14 @@ function pickTable (value) {
   return ALLOWED_TABLES.includes(name) ? name : ''
 }
 
-/** 删除后回跳的地址（referer 优先，兜底后台首页） */
+/**
+ * 删除后回跳的地址（referer 优先，兜底后台首页）
+ * ⚠️ Referer 是客户端可控的，直接 ctx.redirect(referer) 就是**开放重定向**漏洞
+ * （实测可 302 到 https://evil.example.com）。必须用 safeBackPath 限制为站内相对路径。
+ */
 function backTo (ctx) {
-  return (ctx.state.G && ctx.state.G.prevPage) || '/admin'
+  const referer = ctx.state.G && ctx.state.G.prevPage
+  return safeBackPath(referer, '/admin')
 }
 
 router.get('/', async (ctx) => {
@@ -89,20 +95,42 @@ router.post('/changeSort', csrfGuard, requireTablePermission('update'), async (c
 // （原为 GET /admin/remove?collectionName=表 —— 最危漏洞，已重构为 POST）
 router.post('/remove', csrfGuardPage, requireTablePermission('delete'), async (ctx) => {
   const table = pickTable(ctx.request.body.collectionName)
-  const id = ctx.request.body.id
-  if (!table) {
-    ctx.status = 400
+  const rawId = String(ctx.request.body.id || '')
+  const back = backTo(ctx)
+
+  // 统一用错误页反馈（而不是静默回跳）——静默失败会让用户以为"删成功了"
+  const deny = async (message, status = 400) => {
+    ctx.status = status
     await ctx.render('admin/error', {
-      message: '参数错误（表名不在白名单）',
-      redirect: (ctx.state.__HOST__ || '') + backTo(ctx)
+      message,
+      redirect: (ctx.state.__HOST__ || '') + back
     })
-    return
   }
+
+  if (!table) return deny('参数错误（表名不在白名单）')
+  if (!/^[0-9A-Za-z_-]{1,64}$/.test(rawId)) return deny('参数错误（id 非法）')
+
+  // —— 业务守卫：避免"删出孤儿数据"与"把系统删到没人能进" ——
+  if (table === 'admin') {
+    if (rawId === ctx.session.userinfo._id) return deny('不能删除当前登录的账号')
+    // 无物理外键 + 单角色模型下，把管理员删光就再也进不去后台了，必须先拦住
+    const total = await DB.count('admin', {})
+    if (total <= 1) return deny('系统至少需要保留一个管理员账号')
+  }
+  if (table === 'articlecate') {
+    // 分类是树形 + 文章通过 pid 逻辑关联，删父分类会留下"孤儿文章/孤儿子分类"
+    const children = await DB.count('articlecate', { pid: rawId })
+    if (children > 0) return deny(`该分类下还有 ${children} 个子分类，请先处理子分类`)
+    const articles = await DB.count('article', { pid: rawId })
+    if (articles > 0) return deny(`该分类下还有 ${articles} 篇文章，请先移走或删除这些文章`)
+  }
+
   try {
-    await DB.remove(table, { '_id': DB.getObjectId(id) })
+    const { rowCount } = await DB.remove(table, { '_id': rawId })
+    if (!rowCount) return deny('删除失败：记录不存在', 404)
   } catch (err) {
-    // 删除失败（如 id 非法）也回跳，不把栈暴露给用户
+    return deny(`删除失败：${err.message}`)
   }
-  ctx.redirect(backTo(ctx))
+  ctx.redirect(back)
 })
 module.exports = router.routes()

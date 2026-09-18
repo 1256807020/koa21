@@ -60,6 +60,29 @@ const auditQuerySchema = pageSchema.extend({
   action: z.string().max(20).optional()
 })
 
+// ---------------- 统计报表（SQL 教学） ----------------
+
+/** 分组 TopN 的 N */
+const statsTopQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(20).default(2)
+})
+
+/** 按月趋势的月份数 */
+const statsMonthlyQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(36).default(12)
+})
+
+/**
+ * EXPLAIN 参数
+ * ⚠️ 只接受**白名单键**（`query` 是预置查询的名字，不是 SQL 文本）——
+ *    如果允许传原始 SQL，等于把数据库只读权限开放给任何调用方。
+ */
+const statsExplainQuerySchema = z.object({
+  query: z.string({ error: '缺少 query 参数' }).min(1, '缺少 query 参数').max(50),
+  // 注意：不能用 z.coerce.boolean() —— Boolean('false') === true，会把"关"解析成"开"
+  analyze: z.enum(['0', '1', 'true', 'false']).optional()
+})
+
 // ---------------- 通用路径参数 ----------------
 
 const resourceParamSchema = z.object({ resource: z.string().max(50) })
@@ -72,6 +95,9 @@ module.exports = {
   resourceUpdateSchemas,
   rolePermissionSchema,
   auditQuerySchema,
+  statsTopQuerySchema,
+  statsMonthlyQuerySchema,
+  statsExplainQuerySchema,
   resourceParamSchema,
   idParamSchema
 }
