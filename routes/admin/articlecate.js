@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
 router.get('/', async (ctx) => {

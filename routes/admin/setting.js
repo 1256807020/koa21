@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
 
@@ -11,7 +12,8 @@ router.get('/', async (ctx) => {
 })
 router.post('/doEdit', tools.multer().single('site_logo'), async (ctx) => {
   var site_title = ctx.req.body.site_title;
-  let site_logo = ctx.req.file ? ctx.req.file.path.substr(7) : '';
+  var site_url = ctx.req.body.site_url;
+  let site_logo = tools.imgUrl(ctx.req.file);
   var site_keywords = ctx.req.body.site_keywords;
   var site_description = ctx.req.body.site_description;
   var site_icp = ctx.req.body.site_icp;
@@ -20,16 +22,12 @@ router.post('/doEdit', tools.multer().single('site_logo'), async (ctx) => {
   var site_address = ctx.req.body.site_address;
   var site_status = ctx.req.body.site_status;
   var add_time = tools.getTime();
+  // 模块里带了 site_url 输入框，原代码漏存了，这里补上
+  var json = {
+    site_title, site_url, site_keywords, site_description, site_icp, site_qq, site_tel, site_address, site_status, add_time
+  }
   if (site_logo) {
-    var json = {
-      site_title, site_logo, site_keywords, site_description, site_icp, site_qq, site_tel, site_address, site_status, add_time
-
-    }
-  } else {
-    var json = {
-      site_title, site_keywords, site_description, site_icp, site_qq, site_tel, site_address, site_status, add_time
-
-    }
+    json.site_logo = site_logo;
   }
   await DB.update('setting', {}, json);
   ctx.redirect(ctx.state.__HOST__ + '/admin/setting');

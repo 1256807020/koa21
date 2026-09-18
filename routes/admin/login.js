@@ -1,41 +1,60 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let tools = require('../../model/tools')
 let DB = require('../../model/db')
 // 验证码模块
 let svgCaptcha = require('svg-captcha')
+const log = require('../../model/logger')('admin:login')
 router.get('/', async (ctx) => {
   await ctx.render('admin/login')
 })
 router.post('/doLogin', async (ctx) => {
-  // console.log(ctx.request.body)
   // 登陆首先的去数据库匹配账号和密码
   let username = ctx.request.body.username
   let password = ctx.request.body.password
   let code = ctx.request.body.code
-  // console.log(tools.md5(password))
-  // 1 先验证合法性
+  // 1 先验证合法性（原代码在 session 里没有验证码时会直接抛错，这里做兜底）
   // 2 再去数据库匹配
-  if (code.toLocaleLowerCase() == ctx.session.code.toLocaleLowerCase()) {
-    let result = await DB.find('admin', { 'username': username, 'password': tools.md5(password) })
+  const inputCode = String(code || '').trim().toLowerCase()
+  const sessionCode = String(ctx.session.code || '').trim().toLowerCase()
+  if (sessionCode && inputCode === sessionCode) {
+    // 先按用户名查出用户（不再把密码拼进查询条件），再在应用层比对，
+    // 这样既能兼容历史 md5，也能用 bcrypt 校验，且不泄露"用户是否存在"
+    let result = await DB.find('admin', { 'username': username })
     if (result.length > 0) {
-      console.log('登陆成功')
-      // console.log(result)
-      ctx.session.userinfo = result[0]
-      // 更新用户列表 改变用户登陆的时间
-      await DB.update('admin', { '_id': DB.getObjectId(result[0]._id) }, {
-        lasttime: new Date()
-      })
-      ctx.redirect(ctx.state.__HOST__ + '/admin')
+      const matched = await tools.comparePassword(password, result[0].password)
+      if (matched) {
+        log.info(`管理员登录成功：${username}`)
+        ctx.session.code = null   /* 验证码一次性使用 */
+        ctx.session.userinfo = result[0]
+        // 若仍是旧 md5 哈希（不可逆），本次登录成功后自动升级为 bcrypt，避免长期留 md5
+        if (!tools.isBcryptHash(result[0].password)) {
+          await DB.update('admin', { '_id': DB.getObjectId(result[0]._id) }, {
+            password: await tools.hashPassword(password)
+          })
+        }
+        // 更新用户列表 改变用户登陆的时间
+        await DB.update('admin', { '_id': DB.getObjectId(result[0]._id) }, {
+          lasttime: new Date()
+        })
+        ctx.redirect(ctx.state.__HOST__ + '/admin')
+      } else {
+        log.warn(`登录失败（账号或密码错误）：${username}`)
+        ctx.render('admin/error', {
+          message: '用户名或者密码错误',
+          redirect: ctx.state.__HOST__ + '/admin/login'
+        })
+      }
     } else {
-      // console.log('登陆失败')
+      log.warn(`登录失败（账号不存在）：${username}`)
       ctx.render('admin/error', {
         message: '用户名或者密码错误',
         redirect: ctx.state.__HOST__ + '/admin/login'
       })
     }
   } else {
-    // console.log('验证码失败')
+    log.warn(`登录失败（验证码错误）：${username}`)
     ctx.render('admin/error', {
       message: '验证码失败',
       redirect: ctx.state.__HOST__ + '/admin/login'

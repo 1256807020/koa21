@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
 router.get('/', async (ctx) => {
@@ -31,7 +32,7 @@ router.post('/doAdd', tools.multer().single('pic'), async (ctx) => {
   // }
   // 增加到数据库
   let title = ctx.req.body.title
-  let pic = ctx.req.file ? ctx.req.file.path.substr(7) : '';
+  let pic = tools.imgUrl(ctx.req.file);
   let url = ctx.req.body.url
   let sort = ctx.req.body.sort
   let status = ctx.req.body.status
@@ -54,15 +55,16 @@ router.post('/doEdit', tools.multer().single('pic'), async (ctx) => {
   let id = ctx.req.body.id;
   console.log(id)
   let title = ctx.req.body.title
-  let pic = ctx.req.file ? ctx.req.file.path.substr(7) : '';
+  let pic = tools.imgUrl(ctx.req.file);
   let url = ctx.req.body.url
   let sort = ctx.req.body.sort
   let status = ctx.req.body.status
   let add_time = tools.getTime()
+  let json
   if (pic) {
-    var json = { title, pic, url, sort, status, add_time }
+    json = { title, pic, url, sort, status, add_time }
   } else {
-    var json = { title, url, sort, status, add_time }
+    json = { title, url, sort, status, add_time }
   }
   console.log(json)
   // await DB.update('focus', { '_id': DB.getObjectId(id) }, json)

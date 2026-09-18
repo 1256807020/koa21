@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
 router.get('/', async (ctx) => {
@@ -50,8 +51,8 @@ router.post('/doAdd', async (ctx) => {
 
     } else {
 
-      //增加管理员
-      var addResult = await DB.insert('admin', { "username": username, "password": tools.md5(password), "status": 1, "lasttime": '' });
+      //增加管理员（密码用 bcrypt 哈希存储）
+      var addResult = await DB.insert('admin', { "username": username, "password": await tools.hashPassword(password), "status": 1, "lasttime": '' });
 
       ctx.redirect(ctx.state.__HOST__ + '/admin/manage');
 
@@ -71,15 +72,14 @@ router.get('/edit', async (ctx) => {
   })
 })
 router.post('/doEdit', async (ctx) => {
-  // console.log(ctx.request.body)
-  // ctx.body = '编辑用户'
+  // id 需要声明在 try 之外，否则 catch 里访问不到（原代码的 ReferenceError 隐患）
+  const id = ctx.request.body.id
   try {
-    let id = ctx.request.body.id
     let username = ctx.request.body.username
     let password = ctx.request.body.password
     let rpassword = ctx.request.body.rpassword
     if (password !== '') {
-      if (password != rpassword || password.length > 6) {
+      if (password != rpassword || password.length < 6) {
 
         await ctx.render('admin/error', {
           message: '密码和确认密码不一致，或者密码长度小于6位',
@@ -87,8 +87,8 @@ router.post('/doEdit', async (ctx) => {
         })
 
       } else {
-        // 合法的话，更新密码
-        let updateResult = await DB.update('admin', { "_id": DB.getObjectId(id) }, { "username": username, "password": tools.md5(password), "status": 1, "lasttime": '' })
+        // 合法的话，更新密码（bcrypt 哈希）
+        await DB.update('admin', { "_id": DB.getObjectId(id) }, { "username": username, "password": await tools.hashPassword(password), "status": 1, "lasttime": '' })
         ctx.redirect(ctx.state.__HOST__ + '/admin/manage')
       }
     } else {
@@ -97,7 +97,7 @@ router.post('/doEdit', async (ctx) => {
 
   } catch (err) {
     await ctx.render('admin/error', {
-      message: err,
+      message: err.message,
       redirect: ctx.state.__HOST__ + '/admin/manage/edit?id=' + id
     })
   }

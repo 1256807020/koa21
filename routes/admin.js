@@ -1,13 +1,14 @@
 'use strict'
-let router = require('koa-router')();
-let ueditor = require('koa2-ueditor')
+const Router = require('@koa/router')
+const router = new Router()
+let ueditor = require('../model/ueditor.js')
 let url = require('url')
+const config = require('../model/config.js')
 // 配置中间件 获取url地址
 router.use(async (ctx, next) => {
-  // 打印路径，相当于域名
-  // console.log(ctx.request.header.host)
   // 模版引擎配置全局的变量
-  ctx.state.__HOST__ = 'http://' + ctx.request.header.host
+  // 站点地址由 config 推导：上线换 https / 域名只改 .env（原注释里"上线要手改 http"的坑已消除）
+  ctx.state.__HOST__ = config.getOrigin(ctx)
 
   // console.log(ctx.request.url)
   // 原生node对路径进行解析
@@ -55,11 +56,7 @@ router.use('/focus', focus)
 router.use('/link', link)
 router.use('/nav', nav)
 router.use('/setting', setting)
-// 需要传一个数组：静态目录和 UEditor 配置对象
-// 比如要修改上传图片的类型、保存路径
-// /upload/ueditor/image/{yyyy}{mm}{dd}/{filename} 为配置上传到public目录下的
-router.all('/editorUpload', ueditor(['public', {
-  "imageAllowFiles": [".png", ".jpg", ".jpeg"],
-  "imagePathFormat": "/upload/{yyyy}{mm}{dd}/{filename}"  // 保存为原文件名
-}]))
+// 富文本编辑器上传接口（自研实现，见 model/ueditor.js）
+// 保存到 public/upload/{yyyy}{mm}{dd}/ 下，返回 URL 给编辑器插入
+router.all('/editorUpload', ueditor())
 module.exports = router.routes()

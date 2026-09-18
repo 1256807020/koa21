@@ -1,183 +1,243 @@
+'use strict'
+/**
+ * PostgreSQL 18 数据访问层（单例）
+ *
+ * 改造要点：把原来的 MongoDB 版 DB 封装整体替换为 pg 版，
+ * 对外方法签名与返回结构保持兼容，业务路由可以完全不改：
+ *   DB.find(table, where, projection, { page, pageSize, sortJson })
+ *   DB.insert(table, doc)
+ *   DB.update(table, where, data)
+ *   DB.remove(table, where)
+ *   DB.count(table, where)
+ *   DB.getObjectId(id)
+ *
+ * 说明：主键沿用 _id（text，24 位十六进制），
+ * 目的是让模板里 {{$value._id}}、DB.getObjectId(...) 这些写法继续可用。
+ */
+const { Pool } = require('pg')
+const config = require('./config')
+const createLogger = require('./logger')
+const { assertIdent, quoteIdent, buildWhere, buildSelect, buildOrder } = require('./mongo-sql')
 
-var MongoDB = require('mongodb');
-var MongoClient = MongoDB.MongoClient;
-const ObjectID = MongoDB.ObjectID;
+const log = createLogger('db')
 
-var Config = require('./config.js');
+// 文本类列：空字符串按原样保存；其余类型（时间/数值）空字符串一律转 null
+const TEXT_TYPE_RE = /char|text|json|bytea|interval|citext/
 
 class Db {
+  static getInstance () {
+    if (!Db.instance) {
+      Db.instance = new Db()
+    }
+    return Db.instance
+  }
 
-    static getInstance () {
+  constructor () {
+    this.pool = new Pool({
+      host: config.pg.host,
+      port: config.pg.port,
+      user: config.pg.user,
+      password: config.pg.password,
+      database: config.pg.database,
+      ssl: config.pg.ssl,
+      max: config.pg.max,
+      idleTimeoutMillis: config.pg.idleTimeoutMillis,
+      connectionTimeoutMillis: config.pg.connectionTimeoutMillis,
+      application_name: 'koa21-cms'
+    })
 
-        if (!Db.instance) {
-            Db.instance = new Db();
-        }
-        return Db.instance;
+    // 空闲连接被数据库断开会触发，兜底记录，避免进程崩溃
+    this.pool.on('error', (err) => {
+      log.error('数据库连接池异常:', err.message)
+    })
+
+    // 表结构缓存：表名 -> Map(列名 -> 数据类型)
+    this._columns = new Map()
+
+    log.info(`PostgreSQL 连接配置: ${config.pg.user}@${config.pg.host}:${config.pg.port}/${config.pg.database}`)
+  }
+
+  /** 执行原生 SQL（参数化） */
+  query (sql, params = []) {
+    return this.pool.query(sql, params)
+  }
+
+  /** 数据库可用性探测 */
+  async ping () {
+    const { rows } = await this.query('SELECT version() AS version')
+    return rows[0].version
+  }
+
+  async getPool () {
+    return this.pool
+  }
+
+  async close () {
+    await this.pool.end()
+  }
+
+  /** 读取并缓存表结构（用于字段过滤与类型归一化） */
+  async getColumns (table) {
+    const name = assertIdent(table)
+    if (this._columns.has(name)) return this._columns.get(name)
+
+    const { rows } = await this.query(
+      `SELECT column_name, data_type
+         FROM information_schema.columns
+        WHERE table_schema = ANY (current_schemas(false))
+          AND table_name = $1`,
+      [name]
+    )
+
+    const map = new Map(rows.map((row) => [row.column_name, row.data_type]))
+    this._columns.set(name, map)
+    return map
+  }
+
+  /** 表结构变更后调用（例如执行完建表脚本） */
+  clearColumnCache () {
+    this._columns.clear()
+  }
+
+  _normalizeValue (value, dataType) {
+    if (value === undefined) return null
+    if (value === '') {
+      // timestamptz / integer 这类列不接受空字符串，统一转 null
+      if (dataType && !TEXT_TYPE_RE.test(dataType)) return null
+      return value
+    }
+    return value
+  }
+
+  async _prepareData (table, doc) {
+    const columns = await this.getColumns(table)
+    const keys = Object.keys(doc || {})
+      .filter((key) => !key.startsWith('$'))
+      // undefined 表示"本次没有提交这个字段"，直接跳过保持原值
+      // （与 Mongo 的行为一致；否则表单里没勾选的 checkbox 会把 NOT NULL 列写成 NULL）
+      .filter((key) => doc[key] !== undefined)
+      // 过滤掉表里不存在的字段，避免外部表单塞入未知列导致 500
+      .filter((key) => columns.size === 0 || columns.has(key))
+    return {
+      keys,
+      values: keys.map((key) => this._normalizeValue(doc[key], columns.get(key)))
+    }
+  }
+
+  /**
+   * 查询
+   * @param {string} table 表名
+   * @param {object} where Mongo 风格条件
+   * @param {object} projection 投影，如 { _id: 1, title: 1 }
+   * @param {object} options { page, pageSize, sortJson } 不传则不分页
+   */
+  async find (table, where = {}, projection = null, options = null) {
+    const name = assertIdent(table)
+    const params = []
+    let sql = `SELECT ${buildSelect(projection)} FROM ${quoteIdent(name)}`
+
+    const whereSql = buildWhere(where, params)
+    if (whereSql) sql += ` WHERE ${whereSql}`
+
+    if (options && typeof options === 'object') {
+      const orderSql = buildOrder(options.sortJson)
+      if (orderSql) sql += ` ${orderSql}`
+
+      const page = Math.max(1, Number(options.page) || 1)
+      const pageSize = Number(options.pageSize) || 0
+      if (pageSize > 0) {
+        params.push(pageSize)
+        sql += ` LIMIT $${params.length}`
+        params.push((page - 1) * pageSize)
+        sql += ` OFFSET $${params.length}`
+      }
     }
 
-    constructor() {
+    const { rows } = await this.query(sql, params)
+    return rows
+  }
 
-        this.dbClient = '';
-        this.connect();
+  /** 统计条数 */
+  async count (table, where = {}) {
+    const name = assertIdent(table)
+    const params = []
+    const whereSql = buildWhere(where, params)
+    const sql = `SELECT COUNT(*)::int AS count FROM ${quoteIdent(name)}${whereSql ? ` WHERE ${whereSql}` : ''}`
+    const { rows } = await this.query(sql, params)
+    return rows[0].count
+  }
 
+  /** 新增，返回 { rowCount, insertedId, rows } */
+  async insert (table, doc = {}) {
+    const name = assertIdent(table)
+    const { keys, values } = await this._prepareData(name, doc)
+    if (!keys.length) return { rowCount: 0, insertedId: null, rows: [] }
+
+    const columns = keys.map(quoteIdent).join(', ')
+    const placeholders = keys.map((_, index) => `$${index + 1}`).join(', ')
+    const sql = `INSERT INTO ${quoteIdent(name)} (${columns}) VALUES (${placeholders}) RETURNING *`
+
+    const { rows, rowCount } = await this.query(sql, values)
+    return { rowCount, insertedId: rows[0] ? rows[0]._id : null, rows }
+  }
+
+  /** 更新，返回 { rowCount, rows } */
+  async update (table, where = {}, data = {}) {
+    const name = assertIdent(table)
+    const params = []
+    const { keys, values } = await this._prepareData(name, data)
+    if (!keys.length) return { rowCount: 0, rows: [] }
+
+    const sets = keys.map((key, index) => {
+      params.push(values[index])
+      return `${quoteIdent(key)} = $${params.length}`
+    }).join(', ')
+
+    const whereSql = buildWhere(where, params)
+    const sql = `UPDATE ${quoteIdent(name)} SET ${sets}${whereSql ? ` WHERE ${whereSql}` : ''} RETURNING *`
+
+    const { rows, rowCount } = await this.query(sql, params)
+    return { rowCount, rows }
+  }
+
+  /** 删除，返回 { rowCount, rows } */
+  async remove (table, where = {}) {
+    const name = assertIdent(table)
+    const params = []
+    const whereSql = buildWhere(where, params)
+    const sql = `DELETE FROM ${quoteIdent(name)}${whereSql ? ` WHERE ${whereSql}` : ''} RETURNING *`
+
+    const { rows, rowCount } = await this.query(sql, params)
+    return { rowCount, rows }
+  }
+
+  /** 事务：await DB.transaction(async (client) => { ... }) */
+  async transaction (handler) {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await handler(client)
+      await client.query('COMMIT')
+      return result
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
+  }
 
-    connect () {
-        let _that = this;
-        return new Promise((resolve, reject) => {
-            if (!_that.dbClient) {
-                MongoClient.connect(Config.dbUrl, { useNewUrlParser: true }, (err, client) => {
-
-                    if (err) {
-                        reject(err)
-
-                    } else {
-
-                        _that.dbClient = client.db(Config.dbName);
-                        resolve(_that.dbClient)
-                    }
-                })
-
-            } else {
-                resolve(_that.dbClient);
-
-            }
-
-
-        })
-
+  /**
+   * 兼容原 Mongoose/Mongo 的 ObjectID 用法
+   * 现在只是把 id 规范成字符串并校验合法性（防注入、防脏参数）
+   */
+  getObjectId (id) {
+    const value = String(id === undefined || id === null ? '' : id).trim()
+    if (!/^[0-9A-Za-z_-]{1,64}$/.test(value)) {
+      throw new Error(`非法的 id 参数: ${value || '(空)'}`)
     }
-    /*
-
-     DB.find('user',{})  返回所有数据
-     DB.find('user',{},{"title":1})    返回所有数据  只返回一列
-     DB.find('user',{},{"title":1},{   返回第二页的数据
-        page:2,
-        pageSize:20,
-        sort:{"add_time":-1}
-     })
-     js中实参和形参可以不一样      arguments 对象接收实参传过来的数据
-    * */
-    find (collectionName, json1, json2, json3) {
-        if (arguments.length == 2) {
-            var attr = {};
-            var slipNum = 0;
-            var pageSize = 0;
-
-        } else if (arguments.length == 3) {
-            var attr = json2;
-            var slipNum = 0;
-            var pageSize = 0;
-        } else if (arguments.length == 4) {
-            var attr = json2;
-            var page = json3.page || 1;
-            var pageSize = json3.pageSize || 20;
-            var slipNum = (page - 1) * pageSize;
-            if (json3.sortJson) {
-                var sortJson = json3.sortJson;
-            } else {
-                var sortJson = {}
-            }
-        } else {
-            console.log('传入的参数错误')
-        }
-
-        return new Promise((resolve, reject) => {
-
-            this.connect().then((db) => {
-                //var result=db.collection(collectionName).find(json);
-                var result = db.collection(collectionName).find(json1, { fields: attr }).skip(slipNum).limit(pageSize).sort(sortJson)
-                result.toArray(function (err, docs) {
-
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
-                    resolve(docs);
-                })
-
-            })
-        })
-    }
-    update (collectionName, json1, json2) {
-        return new Promise((resolve, reject) => {
-
-
-            this.connect().then((db) => {
-
-                //db.user.update({},{$set:{}})
-                db.collection(collectionName).updateOne(json1, {
-                    $set: json2
-                }, (err, result) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve(result);
-                    }
-                })
-
-            })
-
-        })
-
-    }
-    insert (collectionName, json) {
-        return new Promise((resolve, reject) => {
-            this.connect().then((db) => {
-
-                db.collection(collectionName).insertOne(json, function (err, result) {
-                    if (err) {
-                        reject(err);
-                    } else {
-
-                        resolve(result);
-                    }
-                })
-
-
-            })
-        })
-    }
-
-    remove (collectionName, json) {
-
-        return new Promise((resolve, reject) => {
-            this.connect().then((db) => {
-
-                db.collection(collectionName).removeOne(json, function (err, result) {
-                    if (err) {
-                        reject(err);
-                    } else {
-
-                        resolve(result);
-                    }
-                })
-
-
-            })
-        })
-    }
-    getObjectId (id) {    
-
-        return new ObjectID(id);
-    }
-    // 获取分页总条数
-    count (collectionName, json) {
-
-        return new Promise((resolve, reject) => {
-            this.connect().then((db) => {
-
-                var result = db.collection(collectionName).count(json);
-                result.then(function (count) {
-
-                    resolve(count);
-                }
-                )
-            })
-        })
-
-    }
+    return value
+  }
 }
 
-
-module.exports = Db.getInstance();
+module.exports = Db.getInstance()

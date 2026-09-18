@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 var DB = require('../model/db.js');
 router.get('/', async (ctx) => {
   ctx.body = 'api接口'

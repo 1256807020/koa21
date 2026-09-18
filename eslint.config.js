@@ -1,0 +1,23 @@
+const js = require('@eslint/js')
+const globals = require('globals')
+
+module.exports = [
+  {
+    ignores: ['node_modules/**', 'public/**', 'logs/**', 'views/**', 'db/*.sql']
+  },
+  js.configs.recommended,
+  {
+    files: ['**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'commonjs',
+      globals: { ...globals.node }
+    },
+    rules: {
+      'no-unused-vars': ['warn', { args: 'none' }],
+      'no-console': 'off',
+      semi: ['warn', 'never'],
+      quotes: ['warn', 'single', { avoidEscape: true, allowTemplateLiterals: true }]
+    }
+  }
+]

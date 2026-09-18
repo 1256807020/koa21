@@ -1,190 +1,152 @@
 'use strict'
 // 配置前台路由
-let router = require('koa-router')()
-var DB = require('../model/db.js')
-var url = require('url')
-// 配置中间件，这样nav就可以全局使用了
+const Router = require('@koa/router')
+const router = new Router()
+const url = require('url')
+const DB = require('../model/db.js')
+const config = require('../model/config.js')
+
+// 全局中间件：导航、站点信息、当前路径
 router.use(async (ctx, next) => {
-    // 配置中间件 获取url的地址
-    var pathname = url.parse(ctx.request.url).pathname
-    // console.log(pathname)
-    var navResult = await DB.find('nav', { $or: [{ 'status': 1 }, { 'status': '1' }] }, {}, {
-        sortJson: { "sort": 1 }
-    })
-    //获取系统信息
+  const pathname = url.parse(ctx.request.url).pathname
 
-    var setting = await DB.find('setting', {});
-    ctx.state.__HOST__ = 'http://' + ctx.request.header.host
-    //模板引擎配置全局的变量
-    ctx.state.nav = navResult;
-    ctx.state.pathname = pathname;
-    ctx.state.setting = setting[0];
-    await next()
+  const navResult = await DB.find('nav', { $or: [{ status: 1 }, { status: '1' }] }, {}, {
+    sortJson: { sort: 1 }
+  })
+  const setting = await DB.find('setting', {})
+
+  // 站点地址统一由 config 推导：上线换域名/https 只需改 .env，不用改代码
+  ctx.state.__HOST__ = config.getOrigin(ctx)
+  ctx.state.nav = navResult
+  ctx.state.pathname = pathname
+  ctx.state.setting = setting[0] || {}
+  await next()
 })
+
+// 首页
 router.get('/', async (ctx) => {
-    console.time('start');
-    // 轮播图
-    var focusResult = await DB.find('focus', { $or: [{ 'status': 1 }, { 'status': '1' }] }, {}, {
-        sortJson: { "sort": 1 }
-    })
-    console.timeEnd('start');
-    //轮播图  注意状态数据不一致问题  建议在后台增加数据的时候状态 转化成number类型
-    //导航条的数据
-    var links = await DB.find('link', { $or: [{ 'status': 1 }, { 'status': '1' }] }, {}, {
+  // 轮播图
+  const focusResult = await DB.find('focus', { $or: [{ status: 1 }, { status: '1' }] }, {}, {
+    sortJson: { sort: 1 }
+  })
+  // 友情链接
+  const links = await DB.find('link', { $or: [{ status: 1 }, { status: '1' }] }, {}, {
+    sortJson: { sort: 1 }
+  })
 
-        sortJson: { 'sort': 1 }
-    })
-
-    // console.log(focusResult)
-    ctx.render('default/index', {
-        focus: focusResult,
-        links: links
-    });
+  await ctx.render('default/index', {
+    focus: focusResult,
+    links: links
+  })
 })
+
+// 新闻列表
 router.get('/news', async (ctx) => {
-    var pid = ctx.query.pid
-    var page = ctx.query.page || 1;
-    var pageSize = 3;
-    ctx.state.setting.site_title = 'xxx新闻页面';
-    ctx.state.setting.site_keywords = 'xxx新闻页面';
-    ctx.state.setting.site_description = 'xxx新闻页面';
-    // console.log(pid)
-    //获取成功案例下面的分类
-    var newsResult = await DB.find('articlecate', { 'pid': '5bdaf18de67d082570b10a23' })
-    if (pid) {
-        /*如果存在*/
-        var articleResult = await DB.find('article', { "pid": pid }, {}, {
-            page,
-            pageSize
-        });
-        var articleNum = await DB.count('article', { "pid": pid });
-    } else {
-        //循环子分类获取子分类下面的所有的内容
-        var subCateArr = [];
-        for (var i = 0; i < newsResult.length; i++) {
-            // 强制转换成字符串
-            subCateArr.push(newsResult[i]._id.toString());
-        }
-        var articleResult = await DB.find('article', { "pid": { $in: subCateArr } }, {}, {
-            page,
-            pageSize
-        });
-        var articleNum = await DB.count('article', { "pid": { $in: subCateArr } })
-    }
+  const pid = ctx.query.pid
+  const page = Number(ctx.query.page) || 1
+  const pageSize = 3
 
-    ctx.render('default/news', {
-        newslist: newsResult,
-        articlelist: articleResult,
-        pid: pid,
-        page: page,
-        totalPages: Math.ceil(articleNum / pageSize) || 0
-    });
+  // 新闻下面的二级分类（ID 沿用原教程数据）
+  const newsResult = await DB.find('articlecate', { pid: '5bdaf18de67d082570b10a23' })
 
+  let articleResult
+  let articleNum
+
+  if (pid) {
+    articleResult = await DB.find('article', { pid }, {}, { page, pageSize })
+    articleNum = await DB.count('article', { pid })
+  } else {
+    const subCateArr = newsResult.map((item) => item._id.toString())
+    articleResult = await DB.find('article', { pid: { $in: subCateArr } }, {}, { page, pageSize })
+    articleNum = await DB.count('article', { pid: { $in: subCateArr } })
+  }
+
+  await ctx.render('default/news', {
+    newslist: newsResult,
+    articlelist: articleResult,
+    pid,
+    page,
+    totalPages: Math.ceil(articleNum / pageSize) || 0
+  })
 })
 
+// 服务列表
 router.get('/service', async (ctx) => {
-    //查询
-    var serviceList = await DB.find('article', { 'pid': '5bdaf17fe67d082570b10a22' });
-    // console.log(serviceList);
-    ctx.render('default/service', {
-        serviceList: serviceList
-    });
-
+  const serviceList = await DB.find('article', { pid: '5bdaf17fe67d082570b10a22' })
+  await ctx.render('default/service', {
+    serviceList: serviceList
+  })
 })
+
+// 文章详情
 router.get('/content/:id', async (ctx) => {
+  const id = ctx.params.id
+  const content = await DB.find('article', { _id: DB.getObjectId(id) })
 
-    // console.log(ctx.params);
-    // 获取文章id值
-    var id = ctx.params.id;
+  if (!content.length) {
+    ctx.status = 404
+    ctx.body = '<h3>内容不存在或已删除</h3>'
+    return
+  }
 
-    var content = await DB.find('article', { '_id': DB.getObjectId(id) });
+  /*
+    1、根据文章获取文章的分类信息
+    2、根据分类信息去导航表查找当前分类对应的 url
+    3、把 url 赋值给 pathname（让导航高亮）
+  */
+  const cateResult = await DB.find('articlecate', { _id: DB.getObjectId(content[0].pid) })
+  let navResult = []
 
-    // console.log(content);
-    /*
-       1.根据文章获取文章的分类信息
-   
-       2、根据文章的分类信息，去导航表里面查找当前分类信息的url
-   
-       3、把url赋值给 pathname
-       * */
-    //获取当前文章的分类信息
-    var cateResult = await DB.find('articlecate', { '_id': DB.getObjectId(content[0].pid) });
-
-    //  console.log(cateResult,cateResult[0].pid);
-    if (cateResult[0].pid != 0) {  /*子分类*/
-        //找到当前分类的父亲分类
-        var parentCateResult = await DB.find('articlecate', { '_id': DB.getObjectId(cateResult[0].pid) });
-
-        var navResult = await DB.find('nav', { $or: [{ 'title': cateResult[0].title }, { 'title': parentCateResult[0].title }] });
-
-    } else {  /*父分类*/
-
-        //在导航表查找当前分类对应的url信息
-        var navResult = await DB.find('nav', { 'title': cateResult[0].title });
-
-    }
-
-    if (navResult.length > 0) {
-        //把url赋值给 pathname
-        ctx.state.pathname = navResult[0]['url'];
-
+  if (cateResult.length) {
+    if (String(cateResult[0].pid) !== '0') {
+      // 子分类：连父分类一起找
+      const parentCateResult = await DB.find('articlecate', { _id: DB.getObjectId(cateResult[0].pid) })
+      const titles = [cateResult[0].title, parentCateResult[0] ? parentCateResult[0].title : null].filter(Boolean)
+      navResult = await DB.find('nav', { title: { $in: titles } })
     } else {
-        ctx.state.pathname = '/';
+      navResult = await DB.find('nav', { title: cateResult[0].title })
     }
-    ctx.render('default/content', {
-        list: content[0]
+  }
 
-    });
+  ctx.state.pathname = navResult.length ? navResult[0].url : '/'
+  await ctx.render('default/content', {
+    list: content[0]
+  })
 })
+
 // 成功案例
 router.get('/case', async (ctx) => {
-    var pid = ctx.query.pid
-    var page = ctx.query.page || 1;
-    var pageSize = 3;
-    // console.log(pid)
-    //获取成功案例下面的分类
-    var cateResult = await DB.find('articlecate', { 'pid': '5bdaf166e67d082570b10a21' })
-    if (pid) {
-        /*如果存在*/
-        var articleResult = await DB.find('article', { "pid": pid }, {}, {
-            page,
-            pageSize
-        });
-        var articleNum = await DB.count('article', { "pid": pid });
-    } else {
-        //循环子分类获取子分类下面的所有的内容
-        var subCateArr = [];
-        for (var i = 0; i < cateResult.length; i++) {
-            // 强制转换成字符串
-            subCateArr.push(cateResult[i]._id.toString());
-        }
-        // db.article.find({"pid":{$in:['5ab32da7b0c895428c85f78d','5afa568d416f21368039b05b']}},{"title":1,'pid':1})
-        var articleResult = await DB.find('article', { "pid": { $in: subCateArr } }, {}, {
-            page,
-            pageSize
-        });
-        var articleNum = await DB.count('article', { "pid": { $in: subCateArr } })
-    }
+  const pid = ctx.query.pid
+  const page = Number(ctx.query.page) || 1
+  const pageSize = 3
 
-    ctx.render('default/case', {
-        catelist: cateResult,
-        articlelist: articleResult,
-        pid: pid,
-        page: page,
-        totalPages: Math.ceil(articleNum / pageSize)
-    });
+  // 成功案例下面的二级分类
+  const cateResult = await DB.find('articlecate', { pid: '5bdaf166e67d082570b10a21' })
+
+  let articleResult
+  let articleNum
+
+  if (pid) {
+    articleResult = await DB.find('article', { pid }, {}, { page, pageSize })
+    articleNum = await DB.count('article', { pid })
+  } else {
+    const subCateArr = cateResult.map((item) => item._id.toString())
+    articleResult = await DB.find('article', { pid: { $in: subCateArr } }, {}, { page, pageSize })
+    articleNum = await DB.count('article', { pid: { $in: subCateArr } })
+  }
+
+  await ctx.render('default/case', {
+    catelist: cateResult,
+    articlelist: articleResult,
+    pid,
+    page,
+    totalPages: Math.ceil(articleNum / pageSize) || 0
+  })
 })
+
+// 关于我们
 router.get('/about', async (ctx) => {
-
-    ctx.render('default/about');
-
+  await ctx.render('default/about')
 })
-
-router.get('/case', async (ctx) => {
-
-    ctx.render('default/case');
-
-})
-
 
 module.exports = router.routes()

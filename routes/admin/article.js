@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')()
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db.js')
 let tools = require('../../model/tools.js')
 
@@ -61,14 +62,15 @@ router.post('/doAdd', tools.multer().single('img_url'), async (ctx) => {
   let keywords = ctx.req.body.keywords;
   let description = ctx.req.body.description || '';
   let content = ctx.req.body.content || '';
-  let img_url = ctx.req.file ? ctx.req.file.path.substr(7) : '';
+  let img_url = tools.imgUrl(ctx.req.file);
 
   let add_time = tools.getTime();
   //属性的简写
   let json = {
     pid, catename, title, author, status, is_best, is_hot, is_new, keywords, description, content, img_url, add_time
   }
-  var result = DB.insert('article', json);
+  // 注意：这里原来漏了 await，会出现"跳转完成但数据还没入库"的偶发问题
+  await DB.insert('article', json);
   //跳转
   ctx.redirect(ctx.state.__HOST__ + '/admin/article');
 })
@@ -104,20 +106,20 @@ router.post('/doEdit', tools.multer().single('img_url'), async (ctx) => {
   let keywords = ctx.req.body.keywords;
   let description = ctx.req.body.description || '';
   let content = ctx.req.body.content || '';
-  let img_url = ctx.req.file ? ctx.req.file.path.substr(7) : '';
+  let img_url = tools.imgUrl(ctx.req.file);
   //属性的简写
   //注意是否修改了图片          var           let块作用域
+  let json
   if (img_url) {
-    var json = {
+    json = {
       pid, catename, title, author, status, is_best, is_hot, is_new, keywords, description, content, img_url
     }
   } else {
-    var json = {
+    json = {
       pid, catename, title, author, status, is_best, is_hot, is_new, keywords, description, content
     }
   }
-  console.log(json)
-  DB.update('article', { "_id": DB.getObjectId(id) }, json);
+  await DB.update('article', { "_id": DB.getObjectId(id) }, json);
 
 
   //跳转

@@ -1,5 +1,6 @@
 'use strict'
-let router = require('koa-router')();
+const Router = require('@koa/router')
+const router = new Router()
 let DB = require('../../model/db')
 router.get('/', async (ctx) => {
   await ctx.render('admin/index')
@@ -13,12 +14,13 @@ router.get('/changeStatus', async (ctx) => {
   // console.log(data)
 
   if (data.length > 0) {
+    let json
     if (data[0][attr] == 1) {
-      var json = { /*es6 属性名表达式*/
+      json = { /*es6 属性名表达式*/
         [attr]: 0
       };
     } else {
-      var json = {
+      json = {
         [attr]: 1
       };
     }
