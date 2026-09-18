@@ -209,6 +209,16 @@ pnpm dev          # 默认 http://localhost:3000
 
 ---
 
+## 十四、数据库设计与 SQL 实战
+
+> 表关联（无外键的逻辑关联）、关系模型三件套（含多对多中间表）、核心 SQL、
+> 本项目常用实战 SQL（分页/模糊搜索/树形 CTE/统计/事务/EXPLAIN），以及
+> **"外键 vs 无外键 / ORM vs 手写 SQL"的架构师解惑**，见独立文档
+> **[docs/database-sql.md](docs/database-sql.md)**。
+> 面向"会用 TypeORM/Prisma 但 SQL 内功弱"的前端转全栈同学，所有示例可在库中直接运行。
+
+---
+
 ## 许可证
 
 内部项目，未开放授权。
