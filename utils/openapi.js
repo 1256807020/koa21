@@ -60,7 +60,19 @@ const pageQueryParams = [
 ]
 
 const idParam = { name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: '记录 _id（24 位）' }
-const resourceParam = { name: 'resource', in: 'path', required: true, schema: { type: 'string', enum: Object.keys(S.resourceAddSchemas) }, description: '资源名（当前支持 manage / article）' }
+// 支持的资源名 = 新增 schema 与编辑 schema 的**并集**：
+// setting 是单行表，只有 update schema 没有 add schema，只取 add 会把它漏掉。
+const RESOURCE_NAMES = [...new Set([
+  ...Object.keys(S.resourceAddSchemas),
+  ...Object.keys(S.resourceUpdateSchemas)
+])].sort()
+const resourceParam = {
+  name: 'resource',
+  in: 'path',
+  required: true,
+  schema: { type: 'string', enum: RESOURCE_NAMES },
+  description: `资源名（支持 ${RESOURCE_NAMES.join(' / ')}；其中 setting 为单行配置，仅支持 list 与 edit）`
+}
 
 function buildSpec () {
   return {
@@ -214,6 +226,35 @@ function buildSpec () {
           parameters: [resourceParam],
           requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ResourceAdd' } } } },
           responses: { 200: jsonResp('新增后的记录'), ...commonErrors }
+        }
+      },
+      '/api/v1/admin/upload': {
+        post: {
+          tags: ['后台内容'],
+          summary: '上传图片',
+          description: [
+            '需要权限点 `upload:create`；写请求需 CSRF。',
+            '**multipart/form-data**，字段名 `file`；同时需带上 `_csrf` 字段（因为 multipart 无法使用自定义请求头）。',
+            '仅接受图片（png/jpg/jpeg/gif/bmp/webp），且**扩展名与 MIME 双重校验**；',
+            '超限或类型不符返回 400。返回 `url` 可直接存进 img_url / pic / site_logo 等字段。'
+          ].join('\n\n'),
+          security: [{ cookieAuth: [], csrfToken: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    file: { type: 'string', format: 'binary', description: '图片文件' },
+                    _csrf: { type: 'string', description: 'CSRF token（取自可读 Cookie csrfToken）' }
+                  },
+                  required: ['file', '_csrf']
+                }
+              }
+            }
+          },
+          responses: { 200: jsonResp('上传结果（含 url）'), ...commonErrors }
         }
       },
       '/api/v1/admin/{resource}/{id}/edit': {

@@ -27,16 +27,28 @@ const code = require('../../utils/code')
 const { z, parse, pageSchema } = require('../../utils/validate')
 const { handle } = require('../../utils/handle')
 const { requireLogin, csrfGuard } = require('../../middleware/guard')
-const { requirePermissionByResource } = require('../../middleware/rbac')
+const { requirePermission, requirePermissionByResource } = require('../../middleware/rbac')
 const { auditLog } = require('../../middleware/auditLog')
 
 const adminService = require('../../services/adminService')
 const articleService = require('../../services/articleService')
+// 结构简单的资源（分类/导航/轮播/友链/站点设置）此前**只有 SSR 端点**，
+// 任何脱离 Koa 模板的后台都调不动它们 —— 这里用通用 CRUD 工厂补齐 JSON API。
+const {
+  articlecateService, navService, focusService, linkService, settingService
+} = require('../../services/simpleResources')
+const tools = require('../../model/tools')
 
 // 资源名 -> service 映射：新增一个资源只需在这里加一行 + 一个 add schema
+// 资源名必须与 rbacService.RESOURCE_TABLE 一致，否则权限点（nav:list 等）对不上。
 const services = {
   manage: adminService,
-  article: articleService
+  article: articleService,
+  articlecate: articlecateService,
+  nav: navService,
+  focus: focusService,
+  link: linkService,
+  setting: settingService
 }
 
 // 请求 schema 统一来自 utils/schemas.js（**单一来源**）：
@@ -63,8 +75,17 @@ function getService (ctx) {
 //   3) auditLog：包住后续流程，业务成功后才写审计（只记写方法）
 //   4) 每个路由再声明自己的权限点（RBAC），实现"能读≠能写"
 // 三道守卫都用 fail() 直接出参、不 throw，避免被判成 500。
+//
+// ⚠️ CSRF 对 multipart 必须跳过（与 SSR 后台同一个坑）：
+//     multipart 请求体要等路由里的 multer 解析，此刻 ctx.request.body 是空的，
+//     读不到 _csrf → 会把所有上传请求误判成 CSRF 失败。
+//     因此这里放行，由 /upload 路由在 multer **之后**再自行校验。
+const csrfGuardSkipMultipart = async (ctx, next) => {
+  if (ctx.is && ctx.is('multipart')) return next()
+  return csrfGuard(ctx, next)
+}
 router.use(requireLogin)
-router.use(csrfGuard)
+router.use(csrfGuardSkipMultipart)
 router.use(auditLog)
 
 // 资源存在性校验：未知资源直接 404。
@@ -104,6 +125,47 @@ router.get('/:resource/:id', knownResource, requirePermissionByResource('list'),
   ok(ctx, item)
 }))
 
+// ---------------- 上传（后台图片上传入口）----------------
+// 为什么补它：权限表里早就有 `upload:create`，但一直**只有 SSR 的 /admin/editorUpload**
+// （ueditor 自有协议 + 当初为了兼容它开的 CSRF 豁免）。新后台走 JSON API，需要一个正常受守卫的端点。
+//
+// ⚠️ 顺序有讲究：multer 必须在 csrfGuard **之前** ——
+//    multipart 的 body 要等 multer 解析，否则此时读不到 _csrf 会误判失败。
+//
+// ⚠️ 复用 tools.multer()：它自带 P0 加固的 uploadFileFilter（图片白名单 + 扩展名/MIME 双校验）。
+//    **绝不在这里另写一套上传逻辑** —— ueditor 当年就是"自成一套、更弱、还绕过白名单"的教训。
+router.post('/upload',
+  // multer 的类型/大小校验失败会 throw，若不转换就会冒泡成 500 ——
+  // 但"传了 .txt""文件太大"是**客户端错误**，必须是 400，否则会污染错误告警。
+  async (ctx, next) => {
+    try {
+      await tools.multer().single('file')(ctx, () => Promise.resolve())
+    } catch (err) {
+      const e = new Error(err.message || '上传失败')
+      e.code = code.PARAM_ERROR
+      throw e
+    }
+    return next()
+  },
+  csrfGuard,
+  requirePermission('upload:create'),
+  handle(async (ctx) => {
+    const file = ctx.file
+    if (!file) {
+      const e = new Error('未接收到上传文件（字段名应为 file）')
+      e.code = code.PARAM_ERROR
+      throw e
+    }
+    ok(ctx, {
+      url: `/${tools.imgUrl(file)}`,   // 如 /upload/xxx.png，前端直接存进 img_url / pic
+      filename: file.filename,
+      originalname: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype
+    }, '上传成功')
+  })
+)
+
 // 新增（需要 xxx:create）
 router.post('/:resource/add', knownResource, requirePermissionByResource('create'), handle(async (ctx) => {
   const svc = getService(ctx)
@@ -121,14 +183,17 @@ router.post('/:resource/add', knownResource, requirePermissionByResource('create
 // 编辑（需要 xxx:update）
 router.post('/:resource/:id/edit', knownResource, requirePermissionByResource('update'), handle(async (ctx) => {
   const svc = getService(ctx)
-  const schema = addSchemas[ctx.params.resource]
+  // ⚠️ 判断"是否支持编辑"要看 **update schema**，不能看 add schema：
+  //    setting 是单行表，不能新增（没有 add schema）但**必须能更新**，
+  //    用 addSchemas 判断会把它误判成"不支持编辑"。
+  const schema = resourceUpdateSchemas[ctx.params.resource]
   if (!schema) {
     const e = new Error('该资源不支持编辑')
     e.code = code.NOT_FOUND
     throw e
   }
   // 编辑允许部分字段（PATCH 语义），这里换成"已放开必填"的 update schema
-  const payload = parse(resourceUpdateSchemas[ctx.params.resource], ctx.request.body)
+  const payload = parse(schema, ctx.request.body)
   const item = await svc.update(ctx.params.id, payload)
   ok(ctx, item, '编辑成功')
 }))

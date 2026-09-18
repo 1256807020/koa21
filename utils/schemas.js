@@ -24,6 +24,13 @@ const publicArticleQuerySchema = pageSchema.extend({
 // 注意：这里的 schema 面向 **JSON API**（字段是结构化 JSON）；
 // 后台老表单（SSR）的 schema 在各自 routes/admin/*.js 里，因为表单字段集不同（多 rpassword 等）。
 
+/**
+ * 后台资源的「新增」schema —— 单一来源：
+ *   路由用它做运行时校验，utils/openapi.js 用它生成文档，避免契约与实现漂移。
+ *
+ * ⚠️ 字段必须与 services 里的 mutableFields 对齐：schema 放行但 service 不接受，字段会被静默丢弃；
+ *    schema 不放行而页面需要，则前端根本传不进来。两边一起看才能保证接口"够用"。
+ */
 const resourceAddSchemas = {
   manage: z.object({
     username: z.string().min(2, '用户名至少 2 位').max(30),
@@ -36,14 +43,65 @@ const resourceAddSchemas = {
     author: z.string().max(50).optional(),
     pid: z.string().optional(),
     content: z.string().optional(),
+    status: z.coerce.number().int().min(0).max(1).optional(),
+    // ↓ 补齐：原先缺这些字段，后台无法设置封面图 / SEO 信息 / 推荐位 / 排序
+    img_url: z.string().max(255).optional(),
+    keywords: z.string().max(255).optional(),
+    description: z.string().max(500).optional(),
+    is_best: z.coerce.number().int().min(0).max(1).optional(),
+    is_hot: z.coerce.number().int().min(0).max(1).optional(),
+    is_new: z.coerce.number().int().min(0).max(1).optional(),
+    sort: z.coerce.number().int().min(0).optional()
+  }),
+  articlecate: z.object({
+    title: z.string().min(1, '分类名必填').max(100),
+    pid: z.string().optional(),
+    keywords: z.string().max(255).optional(),
+    description: z.string().max(500).optional(),
+    status: z.coerce.number().int().min(0).max(1).optional(),
+    sort: z.coerce.number().int().min(0).optional()
+  }),
+  nav: z.object({
+    title: z.string().min(1, '标题必填').max(100),
+    url: z.string().min(1, '链接必填').max(255),
+    sort: z.coerce.number().int().min(0).optional(),
+    status: z.coerce.number().int().min(0).max(1).optional()
+  }),
+  focus: z.object({
+    title: z.string().min(1, '标题必填').max(100),
+    pic: z.string().max(255).optional(),
+    url: z.string().max(255).optional(),
+    sort: z.coerce.number().int().min(0).optional(),
+    status: z.coerce.number().int().min(0).max(1).optional()
+  }),
+  link: z.object({
+    title: z.string().min(1, '标题必填').max(100),
+    pic: z.string().max(255).optional(),
+    url: z.string().max(255).optional(),
+    sort: z.coerce.number().int().min(0).optional(),
     status: z.coerce.number().int().min(0).max(1).optional()
   })
+  // 注意：setting **故意没有 add schema** —— 单行配置表，不支持新增
 }
 
 /** 编辑用 schema：把新增 schema 的必填放开（PATCH 语义，部分字段更新） */
 const resourceUpdateSchemas = Object.fromEntries(
   Object.entries(resourceAddSchemas).map(([key, schema]) => [key, schema.partial()])
 )
+
+// setting 是单行表：不能新增，但必须能更新 —— 单独声明它的 update schema
+resourceUpdateSchemas.setting = z.object({
+  site_title: z.string().min(1, '站点名称必填').max(100),
+  site_url: z.string().max(255).optional(),
+  site_logo: z.string().max(255).optional(),
+  site_keywords: z.string().max(255).optional(),
+  site_description: z.string().max(500).optional(),
+  site_icp: z.string().max(100).optional(),
+  site_qq: z.string().max(50).optional(),
+  site_tel: z.string().max(50).optional(),
+  site_address: z.string().max(255).optional(),
+  site_status: z.coerce.number().int().min(0).max(1).optional()
+}).partial()
 
 // ---------------- RBAC ----------------
 
