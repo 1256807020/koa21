@@ -8,6 +8,7 @@
 const DB = require('../model/db')
 const code = require('../utils/code')
 const { sanitizeArticle } = require('../utils/sanitize')
+const { cleanupFiles } = require('../utils/fileCleanup')
 
 const TABLE = 'article'
 
@@ -86,14 +87,18 @@ async function update (id, data) {
   return rows[0]
 }
 
-/** 删除 */
+/** 删除（删完顺带清理封面图，避免留下孤儿文件） */
 async function remove (id) {
+  // 先取出这一行：① 拿到封面图路径 ② 便于"记录不存在"时给出准确提示
+  const before = (await DB.find(TABLE, { _id: DB.getObjectId(id) }))[0]
   const { rowCount } = await DB.remove(TABLE, { _id: DB.getObjectId(id) })
   if (!rowCount) {
     const e = new Error('文章不存在')
     e.code = code.NOT_FOUND
     throw e
   }
+  // 删除文件失败不影响删除结果（cleanupFiles 内部会吞掉异常并记日志）
+  cleanupFiles('article', before)
   return true
 }
 

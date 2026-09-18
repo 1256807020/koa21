@@ -14,7 +14,8 @@
     "db:init": "node db/init.js",
     "db:reset": "node db/init.js --reset",
     "test": "node --test \"tests/**/*.test.js\"",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "audit:archive": "node scripts/audit-archive.js"
   },
   "keywords": [
     "koa",

@@ -11,6 +11,7 @@ const { csrfGuardPage, csrfGuard } = require('../../middleware/guard')
 const { requirePermissionPage } = require('../../middleware/rbac')
 const rbac = require('../../services/rbacService')
 const { safeBackPath } = require('../../utils/redirect')
+const { cleanupFiles } = require('../../utils/fileCleanup')
 
 /**
  * SSR 专用：权限点由 body 里的 collectionName（表名）+ 动作拼出来。
@@ -126,8 +127,12 @@ router.post('/remove', csrfGuardPage, requireTablePermission('delete'), async (c
   }
 
   try {
+    // 删除前先取出这一行：删完后要用它清理关联的图片文件（img_url / pic 等）
+    const before = (await DB.find(table, { '_id': rawId }))[0]
     const { rowCount } = await DB.remove(table, { '_id': rawId })
     if (!rowCount) return deny('删除失败：记录不存在', 404)
+    // 清理孤儿图片文件（路径 containment 由 utils/fileCleanup 保证，不会删到 upload 之外）
+    cleanupFiles(rbac.TABLE_RESOURCE[table] || table, before)
   } catch (err) {
     return deny(`删除失败：${err.message}`)
   }

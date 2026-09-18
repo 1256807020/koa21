@@ -100,6 +100,8 @@ pnpm dev          # 默认 http://localhost:3000
 | `pnpm db:init` | 建库建表灌种子（幂等） |
 | `pnpm db:reset` | 删库重建 |
 | `pnpm lint` | ESLint 检查 |
+| `pnpm test` | 单元测试（`node:test`，零依赖） |
+| `pnpm audit:archive` | 审计日志归档：过期行搬进 `audit_log_archive`（默认保留 90 天，`--days=`/`--dry-run`/`--prune-days=` 可选） |
 
 ## 七、配置说明（.env）
 
@@ -235,8 +237,9 @@ pnpm dev          # 默认 http://localhost:3000
 
 - 限流计数、权限缓存、会话复核缓存**默认走 Redis**（`REDIS_URL`）；**未配置时会降级为进程内存储**——
   单实例开发没问题，多实例部署务必配置（否则限额各算各的、权限变更最长 30s 才全局一致）。`/healthz` 的 `cache` 字段可确认。
-- 删除记录**不会**同时删除 `public/upload` 里的文件；`audit_log` 无上限增长（需归档策略）。
-- 后台 SSR `doEdit` 表单的 `prevPage` 隐藏域仍可被伪造（同类开放重定向，风险低于 Referer 场景，待统一走 `safeBackPath`）。
+- ✅ 删除记录时会自动清理关联的孤儿图片（`utils/fileCleanup.js`，含路径 containment 防任意文件删除）
+- ✅ `audit_log` 有了归档策略（`pnpm audit:archive`，默认保留 90 天，过期搬进 `audit_log_archive`）
+- ✅ 所有 `prevPage` 回跳统一走 `safeBackPath`（含 SSR doEdit 隐藏域）
 - 生产部署前务必修改默认密码（`admin/123456`）与 `SESSION_KEY`。
 
 ## 十二、改造计划与待办（Roadmap）
@@ -278,11 +281,8 @@ pnpm dev          # 默认 http://localhost:3000
 
 > 原"后台删除为 GET + 表名可控（最危）"问题已修复（见第十一章）；以下为**当前**仍存在、但已知并接受的问题。
 
-- **删除记录不清理上传文件**：删文章后 `public/upload` 里的图片仍保留 → 需要"删除时清理"或对象存储生命周期规则。
-- **`audit_log` 无上限增长**：需要归档/清理策略（例如保留 90 天）。
 - **缓存后端降级**：若未配置 `REDIS_URL`（或 Redis 连不上），限流计数/权限缓存/会话复核会退回**进程内实现** —
   单实例无碍，多实例会出现"限额被放大 N 倍、权限变更最长 30s 才一致"。`/healthz` 的 `cache` 字段可确认当前后端。
-- **SSR `doEdit` 的 `prevPage` 回跳**仍可被伪造（同类开放重定向，风险低于 Referer 场景，待统一走 `safeBackPath`）。
 - 系统设置中"网站地址"为种子数据值，生产请在后台设置页修改。
 - 后台管理 UI 为老版 Ace Admin（jQuery 时代），交互与可维护性落后于现代框架；JSON API（`/api/v1/admin/*`）已就绪，可直接对接现代前端。
 
@@ -299,6 +299,9 @@ pnpm dev          # 默认 http://localhost:3000
 > 前端**将来用什么框架、怎么迁移、哪些目录可以删**，见独立文档
 > **[docs/frontend-architecture.md](docs/frontend-architecture.md)**（Next.js / Nuxt / Astro 选型对比、
 > 目标架构、分阶段路线，以及 `views` `public` 逐目录的替换范围界定）。
+>
+> 另外两份参考：**[docs/koa3-projects-review.md](docs/koa3-projects-review.md)**（2026 年活跃 Koa 项目横向评审 +
+> 媒体存储出海选型）、**[docs/database-sql.md](docs/database-sql.md)**（SQL 实战）。
 
 ---
 
@@ -317,10 +320,13 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] 架构评审：服务端/接口/权限/安全/SEO/部署/规范全维度（见第十二章 Roadmap）
 - [x] SQL 实战文档 `docs/database-sql.md`（表关联/多对多/实战 SQL/架构师解惑）
 - [x] 前端架构演进方案 `docs/frontend-architecture.md`（Next.js/Nuxt/Astro 选型 + 替换范围逐目录界定 + 分阶段路线 + §9 九条方案清单供比较）
+- [x] Koa3 生态横向评审 `docs/koa3-projects-review.md`（koa22/23/24 三项目的优点与坑 + 对照我们不采纳的理由 + **对象存储出海选型**：阿里云 OSS 是否免费 / Cloudflare R2 / Backblaze B2 / Supabase）
 - [x] 后端批次（接口规范 + 可观测性）：API 版本化 `/api/v1`、统一响应体固化、session 瘦身、`/healthz`、全局限流、测试套件（`node:test` 26 项）
 - [x] 后端批次（权限与内容）：**RBAC**（role/permission/role_permission + 内置三角色 + `requirePermission` 中间件）、**操作审计日志**（audit_log + 埋点 + 脱敏 + 查询接口）、**`/api/v1/public/*` 公开内容 API**、**zod 覆盖 SSR 表单**、**OpenAPI 自动生成**；测试套件扩到 **42 项**
 - [x] **Redis 接入**：`model/store.js` 统一缓存/计数存储（Redis 优先，未配置或连不上自动降级进程内）；限流计数、权限缓存、会话复核缓存全部迁移；`/healthz` 暴露 `cache` 字段；测试套件扩到 **54 项**
 - [x] **SQL 教学化收尾**：统计报表（`GROUP BY` / 窗口函数 / 分组 TopN / 累计占比）与 `EXPLAIN` 执行计划分析接口 + 文档
+- [x] **可运维性三项收尾**：① **审计日志冷热分离** —— 新增 `scripts/audit-archive.js` + `audit_log_archive` 表，事务内「搬运+删除」原子完成，默认保留 90 天（支持 `--days=` / `--dry-run` / `--prune-days=`），建议 cron 每日跑 ② **删除记录时清理孤儿图片** —— 新增 `utils/fileCleanup.js`，按资源字段白名单清理，并做**路径 containment**（`img_url` 被篡改成 `../../` 时拒绝执行，防"任意文件删除"）③ **prevPage 统一走 safeBackPath** —— 补掉 SSR `doEdit` 隐藏域那条漏网的开放重定向，并在源头 `routes/admin.js` 就把 Referer 收敛成站内路径 ④ 端到端实测 6/6 通过（含「upload 目录外文件未被误删」的安全回归）；测试扩到 **77 项**
+- [x] **Koa3 生态横向评审**：拆解 2026 年活跃的三 Koa 项目 —— `koa22`（CLI 脚手架，工程习惯最好）/ `koa23`（TS starter，类型功底最好）/ `koa24`（monorepo 全栈，运维形态最完整），逐项比对后确认：它们的**多数优点本项目已具备**（统一响应体、全局错误兜底、requestId、env 强校验、优雅关闭+连接池关闭、`/healthz` 依赖探测、zod+OpenAPI 单一来源），已产出 [`docs/koa3-projects-review.md`](docs/koa3-projects-review.md)，含媒体存储出海选型建议
 - [x] **第二轮全量审计与整改**（先程序化枚举出 **150 条路由**再测，脚本 60 项断言 + agent-browser 真实浏览器）：修复 11 个问题 —— **SSR 后台写操作完全不进审计**、**`/admin/editorUpload` 绕过上传白名单（且能传 zip/rar/doc = 任意文件托管）**、`uploadvideo` 逻辑 bug、3 个未鉴权空壳写接口、`newslist` 不过滤 `status` 导致**下架内容外泄**、`catelist` 返回整表原始行、`pageSize` 硬编码、**GET 登出可被跨站触发**、死模块 `/admin/user`、`router.all` 注册 40+ HTTP 方法；测试套件扩到 **68 项**
 - [x] **接口全矩阵审计与整改**（脚本 33 项断言 + agent-browser 真实浏览器验证）：修复 9 个真实问题 —— 非法 id 返回 500、未知资源 403、可绑定不存在角色、**账号删除后旧会话仍有效**、**开放重定向**、分页统计用错表、校验结果被无声覆盖、删除产生孤儿数据/可删掉最后一个管理员、硬编码（分类 ID 与 pageSize）；测试套件扩到 **48 项**
 

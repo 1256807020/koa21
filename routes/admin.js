@@ -6,6 +6,7 @@ let url = require('url')
 const config = require('../model/config.js')
 const { ensureCsrfToken, csrfGuardPage } = require('../middleware/guard')
 const { auditLog } = require('../middleware/auditLog')
+const { safeBackPath } = require('../utils/redirect')
 
 // 路由级守卫采用「默认保护、例外显式列出」：
 //   - /admin/editorUpload：富文本编辑器上传走自有协议（不带 _csrf），暂豁免；
@@ -33,7 +34,10 @@ router.use(async (ctx, next) => {
   ctx.state.G = {
     url: splitUrl,
     userinfo: ctx.session.userinfo,
-    prevPage: ctx.request.headers['referer']   /*上一页的地址*/
+    // ⚠️ Referer 是客户端可控的，统一在这里就用 safeBackPath 收敛成"站内相对路径"：
+    // 既让模板里渲染的 prevPage 隐藏域天然安全（预防 #2 那条"表单隐藏域被伪造"的路径），
+    // 也让所有下游消费者（backTo/doEdit）默认拿到安全值 —— 防御要做在源头，而不是每个调用点各写一遍。
+    prevPage: safeBackPath(ctx.request.headers['referer'], '/admin')   /*上一页的地址*/
   }
 
   // —— P0 安全①：为所有后台页面准备 CSRF token（种 Cookie + 挂 ctx.state 供模板埋隐藏域）——

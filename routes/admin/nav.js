@@ -6,6 +6,7 @@ let tools = require('../../model/tools.js')
 // P1：SSR 表单也走 zod 校验；写操作按"表名 + 动作"声明 RBAC 权限
 const { z, validatePageBody } = require('../../utils/validate')
 const { requirePermissionPageByTable } = require('../../middleware/rbac')
+const { safeBackPath } = require('../../utils/redirect')
 
 // 导航表单 schema（表单提交的都是字符串，用 coerce 转数字后再入库，类型才正确）
 // ⚠️ 刻意不写 .default()：后台表单"没提交的字段"原本语义是"不修改"，
@@ -58,7 +59,7 @@ router.post('/doEdit', requirePermissionPageByTable('nav', 'update'), validatePa
   let sort = ctx.request.body.sort
   let status = ctx.request.body.status
   let add_time = tools.getTime()
-  let prevPage = ctx.request.body.prevPage || '';  /*上一页的地址*/
+  let prevPage = safeBackPath(ctx.request.body.prevPage, '/admin/nav');  /*上一页的地址*/
   await DB.update('nav', { "_id": DB.getObjectId(id) }, { title, url, sort, status, add_time });
   //跳转
   if (prevPage) {

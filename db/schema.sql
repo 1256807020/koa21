@@ -163,6 +163,30 @@ CREATE INDEX IF NOT EXISTS idx_audit_created  ON audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_admin    ON audit_log (admin_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_log (resource, resource_id);
 
+-- ---------------- 审计归档冷表 ----------------
+-- 热表审计日志只增不减，长期跑会把表撑到几十上百万行（查询变慢、备份变重）。
+-- 归档策略：近期（默认 90 天）留 audit_log，过期行搬到这里（见 scripts/audit-archive.js）。
+-- 结构上刻意"不带索引地照抄字段"，只额外加 archived_at 标记归档时间：
+--   - 冷表查询频率极低，索引只会拖慢写入；
+--   - 冷表不再要求 _id 唯一（原来不同批次归档可能产生重复 _id，这里改用代理主键）。
+CREATE TABLE IF NOT EXISTS audit_log_archive (
+  id          bigserial PRIMARY KEY,
+  admin_id    text,
+  admin_name  varchar(50),
+  action      varchar(20),
+  resource    varchar(50),
+  resource_id text,
+  method      varchar(10),
+  path        varchar(255),
+  status      smallint,
+  ip          varchar(64),
+  detail      jsonb,
+  created_at  timestamptz,
+  archived_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_archive_created ON audit_log_archive (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_archive_archived ON audit_log_archive (archived_at DESC);
+
 -- ---------------- 管理员表补充 role_id（RBAC） ----------------
 -- 已有库不会因为 CREATE TABLE IF NOT EXISTS 而新增列，所以这里显式 ALTER（幂等）
 ALTER TABLE admin ADD COLUMN IF NOT EXISTS role_id text;

@@ -9,6 +9,7 @@ const { sanitizeArticle } = require('../../utils/sanitize')
 const { csrfGuardPage } = require('../../middleware/guard')
 const { z, validatePageBody } = require('../../utils/validate')
 const { requirePermissionPageByTable } = require('../../middleware/rbac')
+const { safeBackPath } = require('../../utils/redirect')
 
 // 文章表单 schema（不加 .default()：未提交的字段保持"不修改"语义）
 const articleSchema = z.object({
@@ -116,7 +117,7 @@ router.get('/edit', async (ctx) => {
 
 router.post('/doEdit', requirePermissionPageByTable('article', 'update'), tools.multer().single('img_url'), csrfGuardPage, validatePageBody(articleSchema, (ctx) => `/admin/article/edit?id=${ctx.request.body.id || ''}`), async (ctx) => {
 
-  let prevPage = ctx.req.body.prevPage || '';  /*上一页的地址*/
+  let prevPage = safeBackPath(ctx.req.body.prevPage, '/admin/article');  /*上一页的地址*/
   let id = ctx.req.body.id;
   let pid = ctx.req.body.pid;
   let catename = ctx.req.body.catename.trim();

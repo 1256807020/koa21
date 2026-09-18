@@ -612,6 +612,55 @@ P0 只加固了前者，编辑器那条就成了绕过口子。更糟的是它�
   - 把"平台能力"从全局挪到显式依赖（本项目已做到：config/logger/store 都是显式 require）。
   → 这些能拿到 ESM 带来的**大部分可维护性收益**，且不会引入回归。
 
+## 阶段九：可运维性收尾 + Koa3 生态横向评审
+
+### 9.1 本轮交付三项（都是"跑久了才会疼"的问题）
+| 项 | 交付 | 要点 |
+| --- | --- | --- |
+| **审计日志归档** | `scripts/audit-archive.js` + `audit_log_archive` 表 + `pnpm audit:archive` | 冷热分离；**搬运与删除必须在同一事务**（否则 insert 成功后 delete 前挂掉，热表会留重复数据）；默认保留 90 天，支持 `--days=` / `--dry-run` / `--prune-days=`；建议 cron 每日跑 |
+| **删除时清理孤儿图片** | `utils/fileCleanup.js` | 按资源字段白名单清理；**路径 containment** 是重点（见 9.2） |
+| **prevPage 统一走 safeBackPath** | `article.js` / `nav.js` 的 doEdit + `routes/admin.js` 源头 | 原来只有 `/admin/remove` 系列走了 safeBackPath，`doEdit` 的隐藏域那条漏了；并在 `ctx.state.G.prevPage` 源头就把 Referer 收敛成站内路径（防御做在源头，而不是每个调用点各写一遍） |
+
+### 9.2 一个必须记住的安全思维
+"**用数据库里的字符串去拼文件路径并删除**" —— 这类功能天生是漏洞放大器。
+`img_url` 理论上是自己写的，但一旦它可被篡改（或被历史脏数据污染）成 `upload/../../../app.js`，
+"清理垃圾"就秒变**任意文件删除**。
+所以必须：① 解析路径后做 `path.relative(UPLOAD_ROOT, abs)`，结果以 `..` 开头或为绝对路径就拒绝；
+② 只删普通文件、不删目录；③ 失败只记日志绝不抛（主记录已删，清理是"尽力而为"）。
+验证方式也是双保险：单元测试覆盖各种穿越写法 + **端到端造一个 upload 之外的真实文件，删记录后确认它还在**。
+
+### 9.3 Koa3 生态评审（2026 年活跃三项目）
+
+| 项目 | 定位 | 优点 | 坑 |
+| --- | --- | --- | --- |
+| koa22 | Koa3 **CLI 脚手架** | 洋葱装配顺序、requestId 透传、errorHandler+`app.on('error')` 双通道、校验错误归一化 422、日志分文件、CORS 默认关闭、CLI 净化 package.json 与 lock | 测试几乎为零、无优雅关闭、master 版有个未定义常量的真 bug（CI 从不测 HTTP 所以没发现）、配置 `Object.assign` 浅覆盖陷阱 |
+| koa23 | Koa3 + **TypeScript** starter | `declare module 'koa'` 增强 ctx + 原型挂 `ctx.ok/fail`、`AppError` + mapError 用 `unknown` 逐层收窄、zod 校验中间件、env 用 zod 强类型化、vitest+supertest 靠"app 与 server 分离导出" | 无 controller/service 分层、一律 HTTP 200 破坏语义、`validated:unknown` 导致类型链路断裂、`no-explicit-any` 关掉后工具函数成片 `any` |
+| koa24 | **monorepo 全栈** + Docker + PM2 | 优雅关闭、Docker 单容器托管前后端、compose healthcheck 带 `start_period`、PM2 cluster 配置、自动路由注册、API/SPA 路径分流 | **号称 Koa3 但实际跑 Koa2**（lock 里 2.16.4）、无全局错误中间件（靠字符串比对 error.message）、`origin:'*'`+`credentials:true` 无效组合、生产 `sync({alter:true})`、密钥进仓库、前后端无共享 schema |
+
+**结论**：这三家的**多数优点我们早就具备**（统一响应体、全局错误兜底、requestId、env 强校验、
+优雅关闭 + 关连接池、`/healthz` 依赖探测、zod+OpenAPI 单一来源）。
+本轮补的恰恰是它们的**共同短板：可运维性**（审计归档、孤儿文件）。
+下一个 P2 建议补 **Dockerfile/compose + PM2 ecosystem** —— 纯配置、零风险、上线收益最大。
+详见 **`docs/koa3-projects-review.md`**。
+
+### 9.4 媒体存储选型（出海）
+- **阿里云 OSS 不是永久免费**：官方只有"新用户免费试用额度"；国际站 2026 年价格约
+  标准存储 **$0.0173/GB/月**（1TB≈$17.7/月），前 5GB 免费，**公网下行流量另计**。
+  它的强项在国内 CDN 与备案链路，**出海不占优**。
+- **出海首选 Cloudflare R2**：免费 **10GB 存储** + 每月 100 万 A 类 / 1000 万 B 类操作，关键是 **egress 流量费 = 0**
+  （内容站"读多写少"，图片外链流量才是大头）；S3 兼容，改造成本低；天然全球边缘。
+- 备选 **Backblaze B2**（10GB 免费，加入了 Cloudflare 带宽联盟 → 经 CF 出流量免费）；
+  **Supabase Storage** 适合"一个平台搞定 DB + 鉴权 + 存储"（Free 计划 $0/月，含 500MB 库 + 5GB egress）。
+- **现在怎么做**：保持本地 `public/upload/` 不动（已过 P0 加固）。
+  迁移时唯一的坑是**别把域名写死** —— 图片 URL 应走配置项（如 `MEDIA_BASE_URL`），
+  我们当前 `tools.imgUrl` 返回相对路径、模板用 `{{__HOST__}}` 拼，将来换配置项即可，成本低。
+
+### 9.5 验证
+- 单测 **77 项**（新增 `tests/fileCleanup.test.js` 9 项，重点是各种路径穿越必须被拒绝）
+- 端到端 **6/6**：删除清理孤儿图片 ✔ / upload 目录外文件未被误删 ✔ / prevPage 外站不再被 302 ✔ / 回跳站内 ✔ / 归档脚本可跑 ✔
+- 归档实测：热表 44 → 0，冷表 0 → **44**，事务原子
+- `npx eslint .` **0 errors**
+
 ### 相关文档
 - 前端框架选型与替换范围：**`docs/frontend-architecture.md`**
   （结论：Koa 收敛为纯 API + 前端独立 Next/Nuxt；`views`/`public` 按「前台层 / 后台层 / 用户数据」三层分别处理，
