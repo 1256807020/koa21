@@ -120,7 +120,7 @@ function buildSpec () {
           type: 'apiKey',
           in: 'cookie',
           name: 'koa:sess',
-          description: '登录后由服务端下发的会话 Cookie（POST /admin/login/doLogin）'
+          description: '登录后由服务端下发的会话 Cookie（POST /backend/login/doLogin）'
         },
         csrfToken: {
           type: 'apiKey',

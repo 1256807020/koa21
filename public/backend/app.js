@@ -1,4 +1,4 @@
-// public/console/app.js
+// public/backend/app.js
 // ============================================================
 // 新后台（Console）前端交互 —— 约 200 行原生 JS，不引入框架。
 // 核心思路：页面 SSR 渲染初始 HTML，交互全部走既有的 /api/v1/admin/* JSON API；
@@ -86,7 +86,7 @@ export function buildPager (container, onPage) {
 function resourceOf () { return location.pathname.split('/')[2] || '' }
 
 function reloadRows (resource, page, keyword) {
-  const url = `/console/${resource}/rows?page=${page}&keyword=${encodeURIComponent(keyword || '')}`
+  const url = `/backend/${resource}/rows?page=${page}&keyword=${encodeURIComponent(keyword || '')}`
   getText(url).then((html) => {
     const list = document.getElementById('list')
     if (list) {
@@ -180,7 +180,7 @@ function init () {
       body: JSON.stringify(payload)
     }).then(() => {
       toast('保存成功', 'success')
-      setTimeout(() => { location.href = `/console/${resource}` }, 400)
+      setTimeout(() => { location.href = `/backend/${resource}` }, 400)
     }).catch((err) => toast(err.message || '保存失败', 'error'))
   })
 
@@ -212,7 +212,7 @@ function init () {
     }).catch((err) => toast(err.message || '上传失败', 'error'))
   })
 
-  // 富文本由 public/console/editor.js（TipTap）接管：扫描 [data-richtext] 挂载编辑器。
+  // 富文本由 public/backend/editor.js（TipTap）接管：扫描 [data-richtext] 挂载编辑器。
   // 这里只负责把页面上所有 <i data-lucide> 渲染成内联 SVG（Lucide，离线 vendor）。
   if (window.lucide) window.lucide.createIcons()
 }

@@ -1,23 +1,49 @@
 'use strict'
+// routes/login.js
+// ============================================================
+// 后台登录（挂载点：/backend/login）
+//   GET  /backend/login            登录页（渲染 Liquid 新模板）
+//   POST /backend/login/doLogin    提交登录（CSRF 双提交 Cookie 校验）
+//   GET  /backend/login/code       验证码 SVG（当前登录页不展示、不校验，仅保留能力）
+//   GET  /backend/login/loginOut   登出（兼容旧 GET 链接；新后台用 POST /backend/logout）
+//
+// 为什么独立挂载（不走 routes/backend.js）：登录页本身**不需要登录态**，
+//   而 routes/backend.js 的全局中间件会拦住未登录用户 → 放在那里会死循环。
+// 本路由组自带 CSRF 初始化（种可读 Cookie + ctx.state.csrfToken），因此可独立挂载。
+// ============================================================
 const Router = require('@koa/router')
 const router = new Router()
-const DB = require('../../model/db')
-const tools = require('../../model/tools')
+const config = require('../model/config')
+const DB = require('../model/db')
+const tools = require('../model/tools')
 const svgCaptcha = require('svg-captcha')
-const log = require('../../model/logger')('admin:login')
-const { checkLock, onFailure, onSuccess } = require('../../middleware/loginRateLimit')
+const log = require('../model/logger')('login')
+const { ensureCsrfToken, csrfGuardPage } = require('../middleware/guard')
+const { checkLock, onFailure, onSuccess } = require('../middleware/loginRateLimit')
+
+const LOGIN_PATH = '/backend/login'
+const HOME_PATH = '/backend'
 
 // 登录失败统一渲染的错误页（复用 backend/error.liquid）
 function loginError (ctx, message) {
-  ctx.render('backend/error', {
+  return ctx.render('backend/error', {
     message,
-    redirect: ctx.state.__HOST__ + '/admin/login'
+    redirect: (ctx.state.__HOST__ || '') + LOGIN_PATH
   })
 }
+
+// 本路由组统一的上下文准备：站点地址（模板用）+ CSRF token（种 Cookie + 挂 ctx.state）
+router.use(async (ctx, next) => {
+  ctx.state.__HOST__ = config.getOrigin(ctx)
+  ensureCsrfToken(ctx)
+  await next()
+})
+
 router.get('/', async (ctx) => {
   await ctx.render('backend/login')
 })
-router.post('/doLogin', async (ctx) => {
+
+router.post('/doLogin', csrfGuardPage, async (ctx) => {
   const username = ctx.request.body.username
   const password = ctx.request.body.password
   const code = ctx.request.body.code
@@ -40,10 +66,7 @@ router.post('/doLogin', async (ctx) => {
       if (matched && Number(result[0].status) !== 1) {
         log.warn(`登录失败（账号已禁用）：${username}`)
         await onFailure(username)
-        await ctx.render('backend/error', {
-          message: '该账号已被禁用，请联系管理员',
-          redirect: ctx.state.__HOST__ + '/admin/login'
-        })
+        await loginError(ctx, '该账号已被禁用，请联系管理员')
       } else if (matched) {
         log.info(`管理员登录成功：${username}`)
         await onSuccess(username)
@@ -61,32 +84,24 @@ router.post('/doLogin', async (ctx) => {
           })
         }
         await DB.update('admin', { _id: DB.getObjectId(result[0]._id) }, { lasttime: new Date() })
-        ctx.redirect(ctx.state.__HOST__ + '/backend')
+        ctx.redirect((ctx.state.__HOST__ || '') + HOME_PATH)
       } else {
         log.warn(`登录失败（账号或密码错误）：${username}`)
         await onFailure(username)
-        ctx.render('backend/error', {
-          message: '用户名或者密码错误',
-          redirect: ctx.state.__HOST__ + '/admin/login'
-        })
+        await loginError(ctx, '用户名或者密码错误')
       }
     } else {
       log.warn(`登录失败（账号不存在）：${username}`)
       await onFailure(username)
-      ctx.render('backend/error', {
-        message: '用户名或者密码错误',
-        redirect: ctx.state.__HOST__ + '/admin/login'
-      })
+      await loginError(ctx, '用户名或者密码错误')
     }
   } else {
     log.warn(`登录失败（验证码错误）：${username}`)
     await onFailure(username)
-    ctx.render('backend/error', {
-      message: '验证码失败',
-      redirect: ctx.state.__HOST__ + '/admin/login'
-    })
+    await loginError(ctx, '验证码失败')
   }
 })
+
 // 验证码（仍生成，登录页当前不展示/不校验）
 router.get('/code', async (ctx) => {
   const captcha = svgCaptcha.create({ size: 4, fontSize: 50, width: 120, height: 34, background: '#cc9966' })
@@ -94,7 +109,8 @@ router.get('/code', async (ctx) => {
   ctx.response.type = 'image/svg+xml'
   ctx.body = captcha.data
 })
-// 登出（GET + CSRF，双提交 Cookie）
+
+// 登出（GET + CSRF，双提交 Cookie；兼容旧链接）
 router.get('/loginOut', async (ctx) => {
   const cookie = ctx.cookies.get('csrfToken')
   const token = String(ctx.query._csrf || '')
@@ -102,10 +118,11 @@ router.get('/loginOut', async (ctx) => {
     ctx.status = 403
     return ctx.render('backend/error', {
       message: 'CSRF 校验失败，无法退出登录',
-      redirect: (ctx.state.__HOST__ || '') + '/admin'
+      redirect: (ctx.state.__HOST__ || '') + HOME_PATH
     })
   }
   ctx.session = null
-  ctx.redirect(ctx.state.__HOST__ + '/admin/login')
+  ctx.redirect((ctx.state.__HOST__ || '') + LOGIN_PATH)
 })
+
 module.exports = router.routes()

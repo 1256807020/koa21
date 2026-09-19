@@ -104,9 +104,9 @@ async function csrfGuardPage (ctx, next) {
   const field = (ctx.request.body && ctx.request.body._csrf) || ctx.get('X-CSRF-Token')
   if (!cookie || !field || cookie !== field) {
     ctx.status = 403
-    await ctx.render('admin/error', {
+    await ctx.render('backend/error', {
       message: 'CSRF 校验失败（表单已过期或非本站来源），请返回重新提交',
-      redirect: (ctx.state.__HOST__ || '') + '/admin'
+      redirect: (ctx.state.__HOST__ || '') + '/backend'
     })
     return
   }

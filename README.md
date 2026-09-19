@@ -61,7 +61,7 @@ koa21/
 │   ├── backend.js         # 新后台页面路由（配置驱动通用 CRUD，挂 /backend）
 │   ├── console.js         # <兼容重定向> 见 app.js 的 /console
 │   ├── api/               # REST 接口（公开 /api/v1/public/*、后台 /api/v1/admin/*）
-│   └── admin/             # 后台登录 / 登出（/admin/login）
+│   └── login.js           # 后台登录 / 登出（挂载在 /backend/login）
 ├── views/                 # LiquidJS 模板
 │   ├── backend/           #   后台（layout/sidenav/dashboard/resource-list/...）
 │   └── themes/default/    #   前台主题（layout.liquid + pages/ + partials/ + snippets/）
@@ -101,7 +101,7 @@ pnpm dev          # 默认 http://localhost:3000
 
 # 5. 访问后台
 #    前台首页：http://localhost:3000/
-#    后台登录：http://localhost:3000/admin/login
+#    后台登录：http://localhost:3000/backend/login
 #    默认账号：admin / 123456   （生产环境请尽快改密）
 ```
 
@@ -216,7 +216,8 @@ pnpm dev          # 默认 http://localhost:3000
 **后台页面（服务端渲染，`/backend`）**
 
 列表页 `GET /backend/:resource`，表单页 `/backend/:resource/add`、`/edit`（资源由 `utils/backendConfig.js` 配置驱动，
-控制器 `routes/backend.js`）；登录 `GET/POST /admin/login`（`/admin` → `/backend` 重定向）。
+控制器 `routes/backend.js`）；登录 `GET/POST /backend/login`（`routes/login.js`，成功后进 `/backend`）。
+老入口 `/admin/*` 全部 302 到 `/backend/*`（`/admin/login` → `/backend/login`），仅为兼容旧书签。
 这些写操作统一走 `/api/v1/admin/*` 或受**登录守卫 + CSRF + RBAC 权限点 + zod 校验**保护。
 
 ## 十、部署建议

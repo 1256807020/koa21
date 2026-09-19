@@ -11,7 +11,7 @@
     <div class="card p-8">
       <h1 class="mb-6 text-center text-xl font-bold text-gray-900">{{ site.title | default: "管理后台" }} · 登录</h1>
       {% if error %}<div class="mb-4 rounded-md bg-red-50 px-4 py-2 text-sm text-red-600">{{ error }}</div>{% endif %}
-      <form method="post" action="/admin/login/doLogin" class="space-y-4">
+      <form method="post" action="/backend/login/doLogin" class="space-y-4">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}">
         <div>
           <label class="mb-1 block text-sm text-gray-600">用户名</label>

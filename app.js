@@ -144,10 +144,11 @@ app.use(async (ctx, next) => {
 const router = new Router()
 const index = require('./routes/index.js')
 const api = require('./routes/api.js')
-const admin = require('./routes/admin.js')
 // 变量名叫 backendAdmin 而非 console —— 后者会遮蔽全局 console 对象，
 // 让本模块后续所有 console.log 直接报错（很隐蔽的坑）。
 const backendAdmin = require('./routes/backend.js')
+// 登录单独挂载在 /backend/login（必须早于 /backend 的通配路由，否则会被 :resource 吞掉）
+const backendLogin = require('./routes/login.js')
 
 // 健康检查：给负载均衡 / K8s / 监控探活用（不鉴权、不限流、不渲染模板）
 // 教学点：探活要"轻"，只查最关键的依赖（DB）；不要把业务校验塞进来，否则探活本身会拖垮服务。
@@ -175,8 +176,17 @@ router.get('/healthz', async (ctx) => {
   }
 })
 
-router.use('/admin', admin)
-// 新后台（Skotwind + Liquid），与老后台并存；完成后再切换入口并删除老后台
+// 老入口 /admin/* → 302 到新后台（纯兼容层，别让旧书签变 404）
+// 用「正则路径的显式路由」而不是 router.use('/admin', subRouter)：
+// 嵌套挂载时 @koa/router 对子路由 ctx.path 是否剥前缀有歧义（实测会 404），
+// 这里直接在完整 path 上做正则匹配，行为确定。
+router.all(/^\/admin(\/.*)?$/, async (ctx) => {
+  const rest = ctx.path.slice('/admin'.length)
+  ctx.redirect(rest.startsWith('/login') ? '/backend/login' : '/backend')
+})
+// 登录页：先于 /backend 的通配路由注册，避免 /backend/login 被当成资源名
+router.use('/backend/login', backendLogin)
+// 新后台（Liquid + Tailwind）
 router.use('/backend', backendAdmin)
 
 // —— API 版本化（P1）——
@@ -212,7 +222,7 @@ async function bootstrap () {
 
   const server = app.listen(config.port, config.host, () => {
     log.info(`环境：${config.env} | 监听：http://${config.host}:${config.port}`)
-    log.info(`后台：http://localhost:${config.port}/admin/login`)
+    log.info(`后台：http://localhost:${config.port}/backend/login`)
   })
 
   const shutdown = async (signal) => {

@@ -44,7 +44,7 @@ const router = new Router()
 // 页面场景应**重定向到登录页**，而不是像 JSON API 那样返回 401
 // （middleware/guard.js 的 requireLogin 是给接口用的，这里自己写更符合页面语义）。
 router.use(async (ctx, next) => {
-  if (!ctx.session.userinfo) return ctx.redirect('/admin/login')
+  if (!ctx.session.userinfo) return ctx.redirect('/backend/login')
 
   ctx.state.userinfo = ctx.session.userinfo
   ctx.state.pathname = ctx.path
@@ -129,7 +129,7 @@ router.post('/logout', async (ctx) => {
     return
   }
   ctx.session = null
-  ctx.redirect('/admin/login')
+  ctx.redirect('/backend/login')
 })
 
 // ---------------- 审计日志（只读）----------------

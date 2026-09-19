@@ -339,7 +339,7 @@ SSR 的"动态"是**每次请求实时合成**，内容改了下一个请求就�
 | 接口 | 说明 |
 |---|---|
 | `GET /api/v1/csrf-token` | 拿 CSRF token（双提交 Cookie，token 种在可读 Cookie `csrfToken`） |
-| `POST /api/v1/admin/login` | 登录（另有 SSR 版 `/admin/login/doLogin` 走验证码） |
+| `POST /api/v1/admin/login` | 登录（另有 SSR 版 `/backend/login/doLogin`） |
 | `GET /api/v1/admin/rbac/me` | 当前用户 + 权限点 |
 | `GET /api/v1/admin/:resource/list` | 列表（分页 `page` `pageSize`） |
 | `POST /api/v1/admin/:resource/add` | 新增 |
@@ -415,7 +415,7 @@ SSR 的"动态"是**每次请求实时合成**，内容改了下一个请求就�
 
 6 个前台页面 200、全部主题资源 200、契约变量真实渲染非空、
 已发布文章 200 / 已下架文章 404 / 非法 id 404 而非 500、
-下架内容不出现在前台列表、不存在的主题与目录穿越尝试均安全回退 default、后台 `/admin/login` 未受影响。
+下架内容不出现在前台列表、不存在的主题与目录穿越尝试均安全回退 default、后台登录未受影响。
 
 ### 14.5 下一步
 
@@ -533,7 +533,7 @@ pnpm build:frontend-css
 
 - 前台 6 页正常渲染（导航 / 子分类标签 / 搜索 / 分页 / 详情 / 面包屑 / 上下篇）
 - `?theme=bogus` 安全回退 `default`；`sitemap.xml`、`robots.txt` 正常
-- 未登录访问 `/backend` → 302 到 `/admin/login`
+- 未登录访问 `/backend` → 302 到 `/backend/login`
 - 会话鉴权后后台 **10 个页面全部 200**（仪表盘/文章/分类/导航/轮播/友链/管理员/站点设置/审计/统计），管理 API 200
 - `pnpm test` 68 项全绿
 
