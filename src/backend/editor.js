@@ -1,10 +1,16 @@
 // src/backend/editor.js
-// TipTap 富文本编辑器（自托管，esbuild 打包到 public/backend/editor.js）。
-// 扫描页面上的 [data-richtext]，在 [data-editor] 上挂载编辑器，并把内容同步到隐藏域。
-import { Editor } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import Image from '@tiptap/extension-image'
-import Link from '@tiptap/extension-link'
+// ============================================================
+// wangEditor v5 富文本编辑器（自托管，esbuild 打包）
+//   产物：public/backend/editor.js（IIFE）+ public/backend/editor.css（样式，需在 layout 里 link）
+//
+// 工作方式：扫描页面上的 [data-richtext] 容器，在其中的 [data-toolbar] / [data-editor]
+//          上分别挂载工具栏与编辑区，内容同步到同容器内的隐藏域 name=<字段名>。
+//
+// 为什么换掉 TipTap：TipTap 本体是"无头(headless)编辑器"，工具栏/样式要自己写，
+// 观感与官方 demo 差距大；wangEditor 自带完整中文工具栏与样式，开箱即用、与后台契合。
+// ============================================================
+import '@wangeditor/editor/dist/css/style.css'
+import { createEditor, createToolbar } from '@wangeditor/editor'
 
 function getCsrf () {
   const c = document.cookie.split('; ').find((x) => x.startsWith('csrfToken='))
@@ -21,111 +27,67 @@ function showToast (msg, type = 'info') {
   setTimeout(() => el.remove(), 3500)
 }
 
-function uploadImage (editor) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.addEventListener('change', () => {
-    const file = input.files[0]
-    if (!file) return
+/**
+ * 图片上传：复用项目统一的 /api/v1/admin/upload
+ * （与其它上传同一套白名单 + CSRF + 鉴权，不另开后门）
+ */
+async function uploadImage (file, insertFn) {
+  try {
     const fd = new FormData()
     fd.append('file', file)
-    fetch('/api/v1/admin/upload', {
+    const res = await fetch('/api/v1/admin/upload', {
       method: 'POST',
       headers: { 'X-CSRF-Token': getCsrf() },
       body: fd
-    }).then((r) => r.json()).then((j) => {
-      if (j.code !== 0) throw new Error(j.message)
-      editor.chain().focus().setImage({ src: j.data.url }).run()
-    }).catch((e) => showToast(e.message || '上传失败', 'error'))
-  })
-  input.click()
+    })
+    const j = await res.json()
+    if (j.code !== 0) throw new Error(j.message || '上传失败')
+    insertFn(j.data.url, file.name, j.data.url)
+  } catch (e) {
+    showToast(e.message || '图片上传失败', 'error')
+  }
 }
 
-function buildToolbar (editor) {
-  const bar = document.createElement('div')
-  bar.className = 'flex flex-wrap items-center gap-1 border-b border-default-200 bg-default-50 px-1 py-1'
+function initOne (wrap) {
+  const toolbarEl = wrap.querySelector('[data-toolbar]')
+  const editorEl = wrap.querySelector('[data-editor]')
+  const hidden = wrap.querySelector('input[type=hidden]')
+  if (!toolbarEl || !editorEl || !hidden) return
 
-  const defs = [
-    { icon: 'bold', title: '加粗', run: () => editor.chain().focus().toggleBold().run(), active: () => editor.isActive('bold') },
-    { icon: 'italic', title: '斜体', run: () => editor.chain().focus().toggleItalic().run(), active: () => editor.isActive('italic') },
-    { icon: 'strikethrough', title: '删除线', run: () => editor.chain().focus().toggleStrike().run(), active: () => editor.isActive('strike') },
-    { icon: 'heading-2', title: '标题 2', run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: () => editor.isActive('heading', { level: 2 }) },
-    { icon: 'list', title: '无序列表', run: () => editor.chain().focus().toggleBulletList().run(), active: () => editor.isActive('bulletList') },
-    { icon: 'list-ordered', title: '有序列表', run: () => editor.chain().focus().toggleOrderedList().run(), active: () => editor.isActive('orderedList') },
-    { icon: 'link', title: '链接', run: () => { const url = window.prompt('链接地址（取消则移除链接）'); if (url === null) return; if (url) editor.chain().focus().setLink({ href: url }).run(); else editor.chain().focus().unsetLink().run() } },
-    { icon: 'image', title: '插入图片', run: () => uploadImage(editor) }
-  ]
+  // 初始正文：模板已把内容原样渲染进 [data-editor]
+  // （middleware/render.js 未开 outputEscape，Liquid 不转义 → innerHTML 即真实 HTML）
+  const html = editorEl.innerHTML.trim() || '<p><br></p>'
+  editorEl.innerHTML = ''
 
-  defs.forEach((d, i) => {
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.title = d.title
-    btn.className = 'kt-btn kt-btn-ghost kt-btn-sm'
-    // 注意：Lucide 的 createIcons() 只会替换 <i data-lucide> 元素，
-    // 所以必须把 data-lucide 放在按钮**内部的 <i>** 上，不能放在 <button> 上。
-    const ic = document.createElement('i')
-    ic.className = 'size-4'
-    ic.setAttribute('data-lucide', d.icon)
-    btn.appendChild(ic)
-    btn.addEventListener('click', (e) => { e.preventDefault(); d.run() })
-    bar.appendChild(btn)
-    if (i === 3 || i === 5) {
-      const sep = document.createElement('span')
-      sep.className = 'mx-1 h-5 w-px bg-default-200'
-      bar.appendChild(sep)
+  const editor = createEditor({
+    selector: editorEl,
+    html,
+    mode: 'default',
+    config: {
+      placeholder: '请输入正文…',
+      onChange: (ed) => { hidden.value = ed.getHtml() },
+      MENU_CONF: {
+        uploadImage: { customUpload: uploadImage }
+      }
     }
   })
+  createToolbar({ editor, selector: toolbarEl, mode: 'default' })
 
-  // ⚠️ 这里**不能**调 lucide.createIcons()：此时 bar 还是游离节点（尚未插入 DOM），
-  //    createIcons 内部是 document.querySelectorAll('[data-lucide]')，找不到游离节点。
-  //    图标渲染由调用方在 insertBefore 之后统一处理。
-
-  const refresh = () => {
-    // 分隔符是 <span>，故 querySelectorAll('button') 的顺序与 defs 一一对应
-    bar.querySelectorAll('button').forEach((b, i) => {
-      const d = defs[i]
-      if (d && d.active) b.classList.toggle('is-active', d.active())
-    })
-  }
-  editor.on('selectionUpdate', refresh)
-  editor.on('transaction', refresh)
-  return bar
+  // 关键：初始化后立刻同步一次，保证"打开编辑页不修改直接提交"也不会丢正文
+  hidden.value = editor.getHtml()
 }
 
 function initBackendEditors () {
   document.querySelectorAll('[data-richtext]').forEach((wrap) => {
-    if (wrap.dataset.tiptap === '1') return
-    const mount = wrap.querySelector('[data-editor]')
-    const hidden = wrap.querySelector('input[type=hidden]')
-    if (!mount || !hidden) return
-    const content = mount.innerHTML
-    const editor = new Editor({
-      element: mount,
-      extensions: [
-        StarterKit,
-        Image.configure({ inline: false, allowBase64: false }),
-        Link.configure({ openOnClick: false, autolink: true })
-      ],
-      content,
-      onUpdate: () => { hidden.value = editor.getHTML() }
-    })
-    // 模板里隐藏域刻意留空（正文含双引号会截断 value="..." 属性），
-    // 这里在挂载后立刻用编辑器内容同步一次，保证"未编辑直接提交"也不会丢正文。
-    hidden.value = editor.getHTML()
-    wrap.insertBefore(buildToolbar(editor), mount)
-
-    // 空内容占位提示：TipTap 空文档是 <p></p>，用 is-empty 类 + CSS ::before 显示占位文案。
-    // 刻意不引入 @tiptap/extension-placeholder，保持依赖最小（一个类名就够）。
-    mount.dataset.placeholder = mount.dataset.placeholder || '请输入正文…'
-    const syncEmpty = () => mount.classList.toggle('is-empty', editor.isEmpty)
-    editor.on('create', syncEmpty)
-    editor.on('update', syncEmpty)
-    syncEmpty()
-
-    wrap.dataset.tiptap = '1'
+    if (wrap.dataset.wang === '1') return
+    try {
+      initOne(wrap)
+      wrap.dataset.wang = '1'
+    } catch (e) {
+      // 单个编辑器失败不影响其它字段
+      console.error('[editor] wangEditor 初始化失败：', e)
+    }
   })
-  // 工具栏已插入 DOM，此时才渲染 Lucide 图标
   if (window.lucide) window.lucide.createIcons()
 }
 

@@ -32,7 +32,7 @@
 | 鉴权/安全 | bcryptjs（密码哈希）、svg-captcha（登录验证码）、sanitize-html（富文本 XSS 净化） |
 | 上传 | @koa/multer + multer（本地磁盘 `public/upload`） |
 | 日志 | log4js |
-| 后台 UI | **Tailwind v4 + TipTap（富文本）+ Lucide 图标 + 极简原生 JS**（`views/backend` + `public/backend`；老 Ace Admin 已删除） |
+| 后台 UI | **Tailwind v4 + wangEditor v5（富文本）+ Lucide 图标 + 极简原生 JS**（`views/backend` + `public/backend`；老 Ace Admin 已删除） |
 | 模块规范 | **CommonJS（`require`）** —— 历史项目演进所致；为何暂不迁 ESM、何时适合迁，见 [`docs/dev-notes.md`](docs/dev-notes.md) 阶段八 8.5 |
 | 前台交互 | **Tailwind v4 + 原生 JS + 主题系统**（LiquidJS 模板，换目录即换皮肤，见 [`docs/theme-system.md`](docs/theme-system.md)） |
 | 包管理 | pnpm（依赖锁定精确版本，见 `.npmrc` 的 `save-exact=true`） |
@@ -66,10 +66,10 @@ koa21/
 │   ├── backend/           #   后台（layout/sidenav/dashboard/resource-list/...）
 │   └── themes/default/    #   前台主题（layout.liquid + pages/ + partials/ + snippets/）
 ├── public/                # 静态资源
-│   ├── backend/           #   后台 CSS/JS（Tailwind 产物 + TipTap + Lucide vendor）
+│   ├── backend/           #   后台 CSS/JS（Tailwind 产物 + wangEditor 的 editor.js/editor.css + Lucide vendor）
 │   ├── themes/default/    #   主题静态资源（css/ js/）
 │   └── upload/            #   用户上传（git 忽略，仅保留目录）
-├── src/                   # 前端源码（Tailwind 入口 CSS、TipTap 编辑器源码）
+├── src/                   # 前端源码（Tailwind 入口 CSS、wangEditor 编辑器源码）
 ├── db/                    # SQL 建表脚本 + 种子数据
 ├── logs/                  # 运行日志（git 忽略）
 └── .env.*                 # 环境配置（.env.development/test/production，含密码，已 git 忽略）
@@ -292,7 +292,7 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] **可观测性**：`/healthz` 健康检查 + 全局限流中间件。（`middleware/rateLimit.js` 按 IP 限流，只罩 /api 与 /admin；`/healthz` 查 DB 返回 status/uptime/latency）
 - [x] **API 文档**：Swagger / OpenAPI 自动生成。（`utils/schemas.js` 单一来源 → `utils/openapi.js` 用 `z.toJSONSchema()` 生成；`GET /api/v1/docs`）
 - [x] **测试套件**：单元 + 接口测试。（用 Node 内置 `node:test` 替代 vitest：环境装不上依赖，且零依赖更轻；`pnpm test`，26 项全绿）
-- [x] **富文本编辑器替换**：ueditor（已停止维护）→ **TipTap v2**，esbuild 自托管打包（`pnpm build:editor` → `public/backend/editor.js`）。
+- [x] **富文本编辑器替换**：ueditor（已停止维护）→ **wangEditor v5**（国产、自带完整中文工具栏），esbuild 自托管打包（`pnpm build:editor` → `public/backend/editor.js` + `editor.css`）。
 
 ## 十三、已知问题
 
@@ -301,7 +301,7 @@ pnpm dev          # 默认 http://localhost:3000
 - **缓存后端降级**：若未配置 `REDIS_URL`（或 Redis 连不上），限流计数/权限缓存/会话复核会退回**进程内实现** —
   单实例无碍，多实例会出现"限额被放大 N 倍、权限变更最长 30s 才一致"。`/healthz` 的 `cache` 字段可确认当前后端。
 - 系统设置中"网站地址"为种子数据值，生产请在后台设置页修改。
-- 后台已完成现代化替换：老 Ace Admin 模板已删除，现为自包含新后台（LiquidJS + Tailwind v4 + TipTap + Lucide，`/backend`）；JSON API（`/api/v1/admin/*`）同时就绪，可供未来 SPA 化复用。
+- 后台已完成现代化替换：老 Ace Admin 模板已删除，现为自包含新后台（LiquidJS + Tailwind v4 + wangEditor v5 + Lucide，`/backend`）；JSON API（`/api/v1/admin/*`）同时就绪，可供未来 SPA 化复用。
 - 角色 / 权限管理 UI **前台后台都还没有**（RBAC 目前仅在数据层与接口层生效，权限点为 `资源:动作`）。
 
 ---
@@ -390,7 +390,7 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] healthz 健康检查 + 全局限流：`/healthz`（查 DB，返回 status/env/uptime/latency）+ `middleware/rateLimit.js`（按 IP，只罩 /api 与 /admin，静态与 healthz 豁免）【已完成】
 - [x] **Swagger / OpenAPI（自动生成）**：请求 schema 只在 `utils/schemas.js` 定义一份，路由用它校验、`utils/openapi.js` 用 `z.toJSONSchema()` 转成 OpenAPI 3.1；`GET /api/v1/openapi.json` + `GET /api/v1/docs`（Swagger UI）【已完成，19 条路径自动生成】
 - [x] 测试套件：用 **Node 内置 `node:test`**（零依赖）替代 vitest，`pnpm test` 共 **42 项全绿**（响应体/错误码、zod、XSS 净化、上传白名单、两个限流器、**审计脱敏、handle 映射、RBAC 兜底、OpenAPI 生成**）【已完成】
-- [ ] 替换 ueditor → wangEditor / TipTap【未开始】
+- [x] 替换 ueditor → **wangEditor v5**（`pnpm build:editor` 自托管打包）【已完成】
 
 ### 待办 — SQL 教学化（贯穿各批次，把基础/进阶/高级用上）
 - [x] 后台列表 JOIN 替代冗余 catename + 消灭 N+1（`services/articleService.list` 用 `LEFT JOIN articlecate` 取 `cate_name`）【已完成】

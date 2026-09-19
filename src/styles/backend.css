@@ -65,20 +65,14 @@ body {
   .kt-btn-ghost { @apply text-default-600 hover:bg-default-100; }
   .kt-btn-sm { @apply px-3 py-1.5 text-xs; }
 
-  /* —— TipTap 富文本（ProseMirror） —— */
+  /* —— wangEditor 富文本 —— */
+  /* 样式主体由 public/backend/editor.css（打包自 @wangeditor/editor）提供，
+     这里只做"外框统一"：官方推荐 wrapper 画外框、工具栏画下边框、编辑区定高。 */
   .kt-btn.is-active { @apply bg-primary/10 text-primary; }
-  /* 外框由 .rich-wrap 统一负责（工具栏由 JS 注入到它内部），编辑器自身不再画边框 */
-  .rich-editor.ProseMirror { @apply relative min-h-64 p-3 outline-none; }
-  .rich-editor.ProseMirror.is-empty::before {
-    content: attr(data-placeholder);
-    @apply pointer-events-none absolute left-3 top-3 text-default-400;
-  }
-  .rich-editor.ProseMirror p { @apply mb-2; }
-  .rich-editor.ProseMirror h2 { @apply mb-2 mt-3 text-lg font-semibold; }
-  .rich-editor.ProseMirror ul { @apply mb-2 list-disc pl-6; }
-  .rich-editor.ProseMirror ol { @apply mb-2 list-decimal pl-6; }
-  .rich-editor.ProseMirror a { @apply text-primary underline; }
-  .rich-editor.ProseMirror img { @apply max-w-full rounded-md; }
+  .rich-wrap { @apply overflow-hidden rounded-md border border-default-300 bg-white; }
+  .rich-wrap .w-e-toolbar { border: 0; border-bottom: 1px solid #e5e7eb; }
+  .rich-wrap .w-e-text-container { border: 0; }
+  .rich-wrap [data-editor] { height: 420px; }
 
   /* —— 确认模态框 —— */
   .kt-modal-mask { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4; }

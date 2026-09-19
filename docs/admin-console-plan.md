@@ -13,7 +13,7 @@
 |---|---|---|
 | 渲染 | **Liquid**（LiquidJS） | 前后台统一；语法与 DedeCMS / WordPress / Shopify 心智接近 |
 | 样式 | **Skotwind 的 CSS（Tailwind v4）** | 纯 HTML + Tailwind 的后台 Dashboard 模板 |
-| 富文本 | **TipTap** | 替换 ueditor（270 个文件） |
+| 富文本 | **wangEditor v5**（国产，自带完整中文工具栏） | 替换 ueditor（270 个文件） |
 | 交互 | **约 30 行原生 JS**（fetch + 局部替换） | 不引入 htmx / Vue；避免版本风险 |
 | 数据 | **`/api/v1/admin/*`** | 已全资源覆盖（见 §1） |
 | 上传 | **`POST /api/v1/admin/upload`** | 复用已加固的 `tools.multer` 白名单 |
@@ -27,7 +27,7 @@
 - 用 Handlebars 的 `{{> partial }}` 做**构建期拼装**（不是运行时数据渲染）
 - ⚠️ 它是 **Dashboard（后台）**，不是官网模板 —— **不能用于前台**
 - 依赖较重（ApexCharts / DataTables / FullCalendar / Quill 1.3.7 / jQuery…），需按需裁剪
-- 自带 Quill 1.3.7 太老，**富文本改用 TipTap**
+- 自带 Quill 1.3.7 太老，**富文本改用 wangEditor v5**（曾试点 TipTap v2，但其为 headless 编辑器、工具栏与样式需自研，观感不佳，已替换）
 
 **真正只需要 9 个文件**：
 `partials/{main, head-css, sidenav, topbar, page-title, footer-scripts}.html` +
@@ -108,7 +108,7 @@ public/
 | **0 ✅** | 后端接口补齐（7 资源 + 上传 + schema 补全） | API 全资源覆盖，22/22 验证通过 |
 | **1** | 引入 LiquidJS + 双引擎渲染；Tailwind v4 构建流程 | 渲染底座 |
 | **2** | Skotwind 9 个文件 → Liquid（布局/侧栏/顶栏） | 后台外壳 |
-| **3** | 文章模块（列表 + 表单 + TipTap + 上传） | **第一个可用模块** |
+| **3** | 文章模块（列表 + 表单 + wangEditor + 上传） | **第一个可用模块** |
 | **4** | 分类 / 导航 / 轮播 / 友链 / 设置 / 管理员 | 后台完整 |
 | **5** | 验证通过 → 删 `views/admin/` + `public/admin/` + `public/ueditor/`（**400+ 文件**） | 彻底甩掉包袱 |
 

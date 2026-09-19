@@ -44,11 +44,12 @@
             </div>
 
           {% elsif f.type == 'richtext' %}
-            {% comment %} 工具栏由 public/backend/editor.js 注入到 .rich-wrap 内（编辑器之前），外框统一由 .rich-wrap 负责。
-               隐藏域刻意留空：正文里常含双引号（如 <a href="...">），写进 value="..." 会把属性截断；
-               改为由 editor.js 初始化后立即 hidden.value = editor.getHTML() 同步。 {% endcomment %}
-            <div class="rich-wrap overflow-hidden rounded-md border border-default-300 bg-white focus-within:border-primary" data-richtext="{{ f.key }}">
-              <div class="rich-editor min-h-64 p-3 outline-none" data-editor data-placeholder="请输入正文…">{{ item[f.key] }}</div>
+            {% comment %} wangEditor：容器 [data-richtext] 内需 [data-toolbar] + [data-editor] 两个挂载点。
+               初始正文由 Liquid 原样渲染进 [data-editor]（render.js 未开 outputEscape，不转义），
+               由 editor.js 读取后交给 wangEditor；隐藏域刻意留空，再由 JS 同步（正文含双引号会截断 value 属性）。 {% endcomment %}
+            <div class="rich-wrap" data-richtext="{{ f.key }}">
+              <div data-toolbar></div>
+              <div data-editor>{{ item[f.key] }}</div>
               <input type="hidden" name="{{ f.key }}" value="">
             </div>
 
