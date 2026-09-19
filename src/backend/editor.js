@@ -44,7 +44,7 @@ function uploadImage (editor) {
 
 function buildToolbar (editor) {
   const bar = document.createElement('div')
-  bar.className = 'mb-2 flex flex-wrap items-center gap-1 rounded-md border border-default-200 bg-default-50 p-1'
+  bar.className = 'flex flex-wrap items-center gap-1 border-b border-default-200 bg-default-50 px-1 py-1'
 
   const defs = [
     { icon: 'bold', title: '加粗', run: () => editor.chain().focus().toggleBold().run(), active: () => editor.isActive('bold') },
@@ -111,6 +111,15 @@ function initBackendEditors () {
       onUpdate: () => { hidden.value = editor.getHTML() }
     })
     wrap.insertBefore(buildToolbar(editor), mount)
+
+    // 空内容占位提示：TipTap 空文档是 <p></p>，用 is-empty 类 + CSS ::before 显示占位文案。
+    // 刻意不引入 @tiptap/extension-placeholder，保持依赖最小（一个类名就够）。
+    mount.dataset.placeholder = mount.dataset.placeholder || '请输入正文…'
+    const syncEmpty = () => mount.classList.toggle('is-empty', editor.isEmpty)
+    editor.on('create', syncEmpty)
+    editor.on('update', syncEmpty)
+    syncEmpty()
+
     wrap.dataset.tiptap = '1'
   })
   // 工具栏已插入 DOM，此时才渲染 Lucide 图标

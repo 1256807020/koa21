@@ -67,7 +67,12 @@ body {
 
   /* —— TipTap 富文本（ProseMirror） —— */
   .kt-btn.is-active { @apply bg-primary/10 text-primary; }
-  .rich-editor.ProseMirror { @apply min-h-64 rounded-md border border-default-300 p-3 outline-none; }
+  /* 外框由 .rich-wrap 统一负责（工具栏由 JS 注入到它内部），编辑器自身不再画边框 */
+  .rich-editor.ProseMirror { @apply relative min-h-64 p-3 outline-none; }
+  .rich-editor.ProseMirror.is-empty::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none absolute left-3 top-3 text-default-400;
+  }
   .rich-editor.ProseMirror p { @apply mb-2; }
   .rich-editor.ProseMirror h2 { @apply mb-2 mt-3 text-lg font-semibold; }
   .rich-editor.ProseMirror ul { @apply mb-2 list-disc pl-6; }
