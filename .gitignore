@@ -15,6 +15,9 @@
 
 # misc
 .DS_Store
+*.log
+*.pem
+*.key
 .env.local
 .env.development.local
 .env.test.local
@@ -25,14 +28,22 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# 上传的临时文件（保留目录本身）
-/public/upload/*.tmp
+# 上传目录：保留目录本身、忽略用户上传文件（public/upload 永不删，仅不入库）
+/public/upload/*
+!/public/upload/.gitkeep
 
 # env / secrets（含数据库密码，禁止提交）
 .env
 .env.development
 .env.production
 .env.test
+
+# 构建 / 缓存产物
+/build
+/dist
+/.turbo
+/.next
+/.tmp
 
 # 项目记忆目录（本地优先）
 .codebuddy/
