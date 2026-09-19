@@ -17,7 +17,9 @@
 
           {% elsif f.type == 'select' %}
             <select name="{{ f.key }}" class="kt-input">
-              {% if f.source == 'categories' %}<option value="{{ f.pidNone | default: '0' }}">（无）</option>
+              {% comment %} 不要写 f.pidNone | default —— Liquid 的 default 会把空字符串替换成 default 值，
+                 导致"（无）"的 value 变成 '0'（article 的 pid 本该是空串）。 {% endcomment %}
+              {% if f.source == 'categories' %}<option value="{{ f.pidNone }}">（无）</option>
                 {% for opt in selectOptions.categories %}<option value="{{ opt.value }}" {% if item[f.key] == opt.value %}selected{% endif %}>{{ opt.label }}</option>{% endfor %}
               {% elsif f.source == 'roles' %}<option value="">（未分配）</option>
                 {% for opt in selectOptions.roles %}<option value="{{ opt.value }}" {% if item[f.key] == opt.value %}selected{% endif %}>{{ opt.label }}</option>{% endfor %}
@@ -42,10 +44,12 @@
             </div>
 
           {% elsif f.type == 'richtext' %}
-            {# 工具栏由 public/backend/editor.js 注入到 .rich-wrap 内（编辑器之前），外框统一由 .rich-wrap 负责 #}
+            {% comment %} 工具栏由 public/backend/editor.js 注入到 .rich-wrap 内（编辑器之前），外框统一由 .rich-wrap 负责。
+               隐藏域刻意留空：正文里常含双引号（如 <a href="...">），写进 value="..." 会把属性截断；
+               改为由 editor.js 初始化后立即 hidden.value = editor.getHTML() 同步。 {% endcomment %}
             <div class="rich-wrap overflow-hidden rounded-md border border-default-300 bg-white focus-within:border-primary" data-richtext="{{ f.key }}">
-              <div class="rich-editor min-h-64 p-3 outline-none" data-editor data-placeholder="请输入正文…">{{ item[f.key] | default: '' }}</div>
-              <input type="hidden" name="{{ f.key }}" value="{{ item[f.key] | default: '' }}">
+              <div class="rich-editor min-h-64 p-3 outline-none" data-editor data-placeholder="请输入正文…">{{ item[f.key] }}</div>
+              <input type="hidden" name="{{ f.key }}" value="">
             </div>
 
           {% elsif f.type == 'number' %}

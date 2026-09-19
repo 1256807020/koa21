@@ -173,6 +173,11 @@ function init () {
       if (k === 'password' && isEdit && v === '') continue // 编辑时留空 = 不修改密码
       payload[k] = v
     }
+    // ⚠️ 未勾选的 checkbox 不会出现在 FormData 里；后端是 PATCH 语义（缺失=不修改），
+    //    会导致"勾了能存、取消勾选却取消不掉"。这里显式补 0。
+    form.querySelectorAll('input[type=checkbox][name]').forEach((cb) => {
+      if (!cb.checked) payload[cb.name] = 0
+    })
     const url = isEdit ? `/api/v1/admin/${resource}/${id}/edit` : `/api/v1/admin/${resource}/add`
     api(url, {
       method: 'POST',

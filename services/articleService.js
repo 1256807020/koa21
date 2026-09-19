@@ -13,6 +13,17 @@ const { cleanupFiles } = require('../utils/fileCleanup')
 const TABLE = 'article'
 
 /**
+ * 允许 create/update 写入的字段白名单。
+ * ⚠️ 必须与 utils/schemas.js 的 article add schema 保持**同集合**：
+ *    schema 放行但这里不收 → 字段被静默丢弃（历史上就因此丢了 描述/关键词/封面图/推荐位/排序）。
+ *    tests/article-fields.test.js 会守住这条契约。
+ */
+const MUTABLE_FIELDS = [
+  'title', 'author', 'pid', 'keywords', 'description', 'img_url',
+  'content', 'is_best', 'is_hot', 'is_new', 'sort', 'status'
+]
+
+/**
  * 列表：单条 SQL 用 JOIN 把分类名带出来；支持分页 + 标题模糊 + 分类筛选
  * @returns {Promise<{list:Array,total:number,page:number,pageSize:number}>}
  */
@@ -62,14 +73,31 @@ async function getById (id) {
   return rows[0] || null
 }
 
-/** 新增 */
-async function create ({ title, author, pid, content, status = 1 }) {
+/**
+ * 新增
+ * ⚠️ 字段必须与 utils/schemas.js 的 article add schema 对齐：
+ *    schema 放行、但这里不收的字段会被**静默丢弃**（曾经只收 title/author/pid/content/status，
+ *    导致后台填的 描述/关键词/封面图/推荐位/排序 全部没存上，编辑时自然是空的）。
+ */
+async function create (data = {}) {
+  // 表单来的都是字符串（'' / '1'），统一转数字，非法值回退默认
+  const num = (v, def = 0) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : def
+  }
   const { rows } = await DB.insert(TABLE, {
-    title,
-    author: author || '',
-    pid: pid || '',
-    content: sanitizeArticle(content), // P0 安全：入库前净化富文本，防存储型 XSS
-    status,
+    title: data.title,
+    author: data.author || '',
+    pid: data.pid || '',
+    keywords: data.keywords || '',
+    description: data.description || '',
+    img_url: data.img_url || '',
+    content: sanitizeArticle(data.content || ''), // P0 安全：入库前净化富文本，防存储型 XSS
+    is_best: num(data.is_best, 0),
+    is_hot: num(data.is_hot, 0),
+    is_new: num(data.is_new, 0),
+    sort: num(data.sort, 0),
+    status: data.status === undefined || data.status === '' ? 1 : num(data.status, 1),
     add_time: new Date()
   })
   return rows[0]
@@ -105,4 +133,4 @@ async function remove (id) {
   return true
 }
 
-module.exports = { list, getById, create, update, remove }
+module.exports = { list, getById, create, update, remove, MUTABLE_FIELDS }

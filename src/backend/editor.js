@@ -110,6 +110,9 @@ function initBackendEditors () {
       content,
       onUpdate: () => { hidden.value = editor.getHTML() }
     })
+    // 模板里隐藏域刻意留空（正文含双引号会截断 value="..." 属性），
+    // 这里在挂载后立刻用编辑器内容同步一次，保证"未编辑直接提交"也不会丢正文。
+    hidden.value = editor.getHTML()
     wrap.insertBefore(buildToolbar(editor), mount)
 
     // 空内容占位提示：TipTap 空文档是 <p></p>，用 is-empty 类 + CSS ::before 显示占位文案。
