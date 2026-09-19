@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title | default: site.title | default: "网站" }}</title>
+  {% if site.keywords %}<meta name="keywords" content="{{ site.keywords }}">{% endif %}
+  {% if site.description %}<meta name="description" content="{{ site.description }}">{% endif %}
+  <link rel="stylesheet" href="/frontend/css/app.css">
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-800">
+  {% include 'frontend/partials/header' %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  {% include 'frontend/partials/footer' %}
+  <script src="/frontend/js/app.js"></script>
+</body>
+</html>

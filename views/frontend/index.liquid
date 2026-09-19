@@ -1,0 +1,69 @@
+{% layout 'frontend/layout', title: '首页' %}
+{% block content %}
+  <!-- 轮播 -->
+  <section class="bg-white">
+    <div id="carousel" class="relative mx-auto max-w-6xl">
+      {% if focus.size > 0 %}
+      <div class="relative aspect-[21/9] overflow-hidden rounded-b-xl">
+        {% for f in focus %}
+        <a href="{{ f.url | default: '#' }}" class="carousel-slide absolute inset-0 transition-opacity duration-700 {% if forloop.first %}opacity-100{% else %}opacity-0{% endif %}">
+          <img src="{{ f.pic }}" alt="{{ f.title }}" class="h-full w-full object-cover">
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-6">
+            <span class="text-lg font-semibold text-white">{{ f.title }}</span>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      <div class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+        {% for f in focus %}
+        <button class="carousel-dot h-2 w-2 rounded-full bg-white/70 {% if forloop.first %}!bg-white{% endif %}" data-index="{{ forloop.index0 }}"></button>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="mx-auto max-w-6xl px-4 py-16 text-center">
+        <h1 class="text-3xl font-bold text-gray-900">{{ site.title | default: "欢迎访问" }}</h1>
+        {% if site.description %}<p class="mt-4 text-gray-500">{{ site.description }}</p>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- 最新文章 -->
+  <section class="container-page py-12">
+    <div class="mb-6 flex items-end justify-between">
+      <h2 class="text-2xl font-bold text-gray-900">最新动态</h2>
+      <a href="/news" class="text-sm text-brand-600 hover:underline">更多 ›</a>
+    </div>
+    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {% for a in articles %}
+      <article class="card overflow-hidden transition hover:shadow-md">
+        <a href="/content/{{ a._id }}">
+          {% if a.img_url %}<img src="{{ a.img_url }}" alt="{{ a.title }}" class="aspect-[16/9] w-full object-cover">{% endif %}
+        </a>
+        <div class="p-4">
+          <div class="mb-2 flex items-center gap-2 text-xs text-gray-400">
+            {% if a.cate_name %}<span class="rounded bg-brand-50 px-2 py-0.5 text-brand-600">{{ a.cate_name }}</span>{% endif %}
+            <span>{{ a.add_time | date }}</span>
+          </div>
+          <h3 class="line-clamp-2 text-base font-semibold text-gray-900">
+            <a href="/content/{{ a._id }}" class="hover:text-brand-600">{{ a.title }}</a>
+          </h3>
+          {% if a.description %}<p class="mt-2 line-clamp-2 text-sm text-gray-500">{{ a.description }}</p>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- 友情链接 -->
+  {% if links.size > 0 %}
+  <section class="container-page pb-12">
+    <h2 class="mb-4 text-xl font-bold text-gray-900">友情链接</h2>
+    <div class="flex flex-wrap gap-3">
+      {% for l in links %}
+      <a href="{{ l.url }}" target="_blank" rel="noopener" class="card px-4 py-2 text-sm text-gray-600 hover:text-brand-600">{{ l.title }}</a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+{% endblock %}

@@ -167,4 +167,10 @@ async function getArticle (id) {
   }
 }
 
-module.exports = { getSettings, getNav, getFocus, getLinks, getCategoryTree, listArticles, getArticle }
+/** 直接子分类（status=1，按 sort 升序）—— 列表页的二级分类标签页用 */
+async function getChildren (parentId) {
+  return DB.find('articlecate', { pid: parentId, status: 1 },
+    { _id: 1, title: 1, sort: 1 }, { sortJson: { sort: 1 } })
+}
+
+module.exports = { getSettings, getNav, getFocus, getLinks, getCategoryTree, listArticles, getArticle, getChildren }

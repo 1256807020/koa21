@@ -1,0 +1,33 @@
+<header class="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
+  <div class="container-page flex h-16 items-center justify-between">
+    <a href="/" class="flex items-center gap-2">
+      {% if site.logo %}<img src="{{ site.logo }}" alt="{{ site.title }}" class="h-9 w-auto">{% endif %}
+      <span class="text-lg font-semibold text-gray-900">{{ site.title | default: "网站" }}</span>
+    </a>
+    <nav class="hidden items-center gap-1 md:flex">
+      <a href="/" class="nav-link {% if pathname == '/' %}active{% endif %}">首页</a>
+      <a href="/news" class="nav-link {% if pathname == '/news' %}active{% endif %}">新闻动态</a>
+      <a href="/case" class="nav-link {% if pathname == '/case' %}active{% endif %}">成功案例</a>
+      <a href="/service" class="nav-link {% if pathname == '/service' %}active{% endif %}">服务</a>
+      <a href="/about" class="nav-link {% if pathname == '/about' %}active{% endif %}">关于我们</a>
+      {% for item in nav %}
+      <a href="{{ item.url }}" class="nav-link" target="_blank" rel="noopener">{{ item.title }}</a>
+      {% endfor %}
+    </nav>
+    <button id="navToggle" class="rounded-md p-2 text-gray-600 md:hidden" aria-label="菜单">
+      <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+  <div id="mobileNav" class="hidden border-t border-gray-100 bg-white md:hidden">
+    <div class="container-page flex flex-col py-2">
+      <a href="/" class="nav-link">首页</a>
+      <a href="/news" class="nav-link">新闻动态</a>
+      <a href="/case" class="nav-link">成功案例</a>
+      <a href="/service" class="nav-link">服务</a>
+      <a href="/about" class="nav-link">关于我们</a>
+      {% for item in nav %}
+      <a href="{{ item.url }}" class="nav-link" target="_blank" rel="noopener">{{ item.title }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</header>

@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+}
+
+@layer components {
+  .container-page { @apply mx-auto w-full max-w-6xl px-4; }
+  .btn-brand { @apply inline-flex items-center justify-center rounded-md bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700; }
+  .card { @apply rounded-xl border border-gray-100 bg-white shadow-sm; }
+  .nav-link { @apply rounded-md px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900; }
+  .nav-link.active { @apply bg-brand-50 text-brand-700; }
+}
+
+/* 富文本正文排版 */
+.prose { line-height: 1.8; color: #374151; }
+.prose p { margin: 0.75rem 0; }
+.prose img { border-radius: 0.5rem; max-width: 100%; height: auto; }
+.prose h1, .prose h2, .prose h3 { margin: 1.25rem 0 0.75rem; font-weight: 600; color: #111827; }
+.prose a { color: #2563eb; text-decoration: underline; }
+.prose ul, .prose ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }

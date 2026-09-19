@@ -1,0 +1,12 @@
+{% layout 'frontend/layout', title: '关于我们' %}
+{% block content %}
+<section class="container-page py-10">
+  <h1 class="mb-6 text-2xl font-bold text-gray-900">关于我们</h1>
+  {% if info.description %}<div class="prose max-w-none">{{ info.description | raw }}</div>{% endif %}
+  <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% if info.tel %}<div class="card p-4"><p class="text-sm text-gray-400">联系电话</p><p class="mt-1 font-medium text-gray-900">{{ info.tel }}</p></div>{% endif %}
+    {% if info.qq %}<div class="card p-4"><p class="text-sm text-gray-400">QQ</p><p class="mt-1 font-medium text-gray-900">{{ info.qq }}</p></div>{% endif %}
+    {% if info.address %}<div class="card p-4"><p class="text-sm text-gray-400">公司地址</p><p class="mt-1 font-medium text-gray-900">{{ info.address }}</p></div>{% endif %}
+  </div>
+</section>
+{% endblock %}

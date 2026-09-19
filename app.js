@@ -6,7 +6,6 @@
 const path = require('path')
 const Koa = require('koa')
 const Router = require('@koa/router')
-const render = require('koa-art-template')
 const serve = require('koa-static')
 // koa-session 7 起改为具名导出 createSession(opts, app)
 const { createSession } = require('koa-session')
@@ -15,7 +14,6 @@ const cors = require('@koa/cors')
 
 const config = require('./model/config')
 const createLogger = require('./model/logger')
-const tools = require('./model/tools')
 const DB = require('./model/db')
 const CODE = require('./utils/code')
 const { fail } = require('./utils/response')
@@ -63,7 +61,7 @@ app.use(async (ctx, next) => {
       const message = (config.isProd && c === CODE.UNKNOWN) ? '服务器内部错误' : err.message
       fail(ctx, c, message, null, status)
     } else {
-      await ctx.render('admin/error', {
+      await ctx.render('console/error', {
         message: config.isProd ? '服务器内部错误' : err.message,
         redirect: ctx.state.__HOST__ || '/'
       })
@@ -121,28 +119,7 @@ app.use(createSession({
 }, app))
 
 // ---------------- 6. 模板引擎 ----------------
-// 模板里用的过滤器必须注册到 art-template 的 imports，
-// 直接写成 dateFormat 顶层选项（老教程的写法）在新版本下会报 $imports.dateFormat is not a function
-const artTemplate = require('art-template')
-artTemplate.defaults.imports.dateFormat = tools.formatDate
-artTemplate.defaults.imports.timeFormat = (value) => tools.formatDate(value, 'YYYY-MM-DD HH:mm:ss')
-artTemplate.defaults.imports.dateOnly = (value) => tools.formatDate(value, 'YYYY-MM-DD')
-
-render(app, {
-  root: path.join(config.root, 'views'),
-  extname: '.html',
-  debug: config.isDev,
-  imports: {
-    dateFormat: tools.formatDate,
-    timeFormat: (value) => tools.formatDate(value, 'YYYY-MM-DD HH:mm:ss'),
-    dateOnly: (value) => tools.formatDate(value, 'YYYY-MM-DD')
-  }
-})
-
-// —— 双模板引擎：在 art-template 之上叠加 LiquidJS ——
-// 必须放在 render(app, ...) **之后**：它复用 koa-art-template 已经挂好的 ctx.render，
-// 再包一层"有 .liquid 就走 LiquidJS，否则回退 art-template"。
-// 这样新后台（views/console/**/*.liquid）可以用 Liquid，而老后台 29 个模板零改动。
+// 统一 ctx.render（middleware/render.js）：仅 LiquidJS，老 art-template 模板已删除。
 const { setupLiquidRender } = require('./middleware/render')
 setupLiquidRender(app)
 
