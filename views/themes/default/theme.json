@@ -1,0 +1,9 @@
+{
+  "name": "default",
+  "title": "默认主题",
+  "author": "koa21",
+  "version": "1.0.0",
+  "description": "官方样板主题，同时作为「如何开发一套主题」的参考样例（LiquidJS 版）",
+  "pages": ["index", "news", "content", "case", "about", "service"],
+  "engine": "liquidjs"
+}

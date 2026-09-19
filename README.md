@@ -24,7 +24,7 @@
 |---|---|
 | Web 框架 | **Koa 3.2.1**（当前最新主线）+ @koa/router |
 | 会话 | koa-session（cookie session，httpOnly + signed） |
-| 模板 | koa-art-template + art-template（服务端渲染） |
+| 模板 | **LiquidJS**（前后台统一 `.liquid`，art-template 已彻底移除） |
 | 数据库 | PostgreSQL 18（驱动 `pg`） |
 | 缓存 / 限流存储 | Redis（驱动 `redis`，可选；未配置则自动降级为进程内存储） |
 | 静态服务 | koa-static |
@@ -32,9 +32,9 @@
 | 鉴权/安全 | bcryptjs（密码哈希）、svg-captcha（登录验证码）、sanitize-html（富文本 XSS 净化） |
 | 上传 | @koa/multer + multer（本地磁盘 `public/upload`） |
 | 日志 | log4js |
-| 后台 UI | jQuery + Ace Admin 1.x 模板 |
+| 后台 UI | **Tailwind v4 + TipTap（富文本）+ Lucide 图标 + 极简原生 JS**（`views/backend` + `public/backend`；老 Ace Admin 已删除） |
 | 模块规范 | **CommonJS（`require`）** —— 历史项目演进所致；为何暂不迁 ESM、何时适合迁，见 [`docs/dev-notes.md`](docs/dev-notes.md) 阶段八 8.5 |
-| 前台交互 | jQuery + Swiper |
+| 前台交互 | **Tailwind v4 + 原生 JS + 主题系统**（LiquidJS 模板，换目录即换皮肤，见 [`docs/theme-system.md`](docs/theme-system.md)） |
 | 包管理 | pnpm（依赖锁定精确版本，见 `.npmrc` 的 `save-exact=true`） |
 
 ## 三、功能模块
@@ -52,16 +52,24 @@ koa21/
 ├── model/
 │   ├── config.js          # 统一配置中心（按 NODE_ENV 加载 .env）
 │   ├── db.js              # PostgreSQL 数据访问层（单例 Pool，参数化查询）
-│   ├── mongo-sql.js       # Mongo 风格查询 → SQL 翻译器（白名单防注入）
+│   ├── sql-builder.js     # Mongo 风格查询 → SQL 翻译器（表名/字段名白名单防注入）
 │   ├── tools.js           # 密码哈希、文件上传中间件、日期格式化
-│   ├── ueditor.js         # 富文本编辑器上传接口（自研）
+│   ├── store.js           # Redis / 进程内 统一缓存与计数存储（未配置自动降级）
 │   └── logger.js          # log4js 封装
 ├── routes/
-│   ├── index.js           # 前台页面路由
-│   ├── api.js             # 前台公开 JSON 接口（/api/*）
-│   └── admin/             # 后台管理路由（渲染 + 表单提交）
-├── views/                 # art-template 模板（admin/ 后台，default/ 前台）
-├── public/                # 静态资源（含 admin/js 的 Ace 库、前台 js/css）
+│   ├── index.js           # 前台页面路由（主题系统 + 变量契约 + sitemap/robots）
+│   ├── backend.js         # 新后台页面路由（配置驱动通用 CRUD，挂 /backend）
+│   ├── console.js         # <兼容重定向> 见 app.js 的 /console
+│   ├── api/               # REST 接口（公开 /api/v1/public/*、后台 /api/v1/admin/*）
+│   └── admin/             # 后台登录 / 登出（/admin/login）
+├── views/                 # LiquidJS 模板
+│   ├── backend/           #   后台（layout/sidenav/dashboard/resource-list/...）
+│   └── themes/default/    #   前台主题（layout.liquid + pages/ + partials/ + snippets/）
+├── public/                # 静态资源
+│   ├── backend/           #   后台 CSS/JS（Tailwind 产物 + TipTap + Lucide vendor）
+│   ├── themes/default/    #   主题静态资源（css/ js/）
+│   └── upload/            #   用户上传（git 忽略，仅保留目录）
+├── src/                   # 前端源码（Tailwind 入口 CSS、TipTap 编辑器源码）
 ├── db/                    # SQL 建表脚本 + 种子数据
 ├── logs/                  # 运行日志（git 忽略）
 └── .env.*                 # 环境配置（.env.development/test/production，含密码，已 git 忽略）
@@ -205,10 +213,11 @@ pnpm dev          # 默认 http://localhost:3000
 |---|---|---|
 | `/healthz` | GET | 健康检查（查 DB，返回 status/env/uptime/latencyMs；不鉴权、不限流） |
 
-**后台页面（传统服务端渲染，保留兼容）**
+**后台页面（服务端渲染，`/backend`）**
 
-列表页 `GET /admin/:module`，表单页 `/add`、`/edit`，提交 `POST /admin/:module/doAdd`、`/doEdit`。
-这些表单同样受**登录守卫 + CSRF + RBAC 权限点 + zod 校验**保护（见 `routes/admin/*.js`）。
+列表页 `GET /backend/:resource`，表单页 `/backend/:resource/add`、`/edit`（资源由 `utils/backendConfig.js` 配置驱动，
+控制器 `routes/backend.js`）；登录 `GET/POST /admin/login`（`/admin` → `/backend` 重定向）。
+这些写操作统一走 `/api/v1/admin/*` 或受**登录守卫 + CSRF + RBAC 权限点 + zod 校验**保护。
 
 ## 十、部署建议
 
@@ -276,13 +285,13 @@ pnpm dev          # 默认 http://localhost:3000
 
 ### P2 — SEO / 部署 / 工程化
 
-- [ ] **SEO 增强**：`sitemap.xml`、`robots.txt`、每页 `meta description` / Open Graph、结构化数据（JSON-LD）。
+- [x] **SEO 增强**：`sitemap.xml`、`robots.txt`、每页 `meta description` / Open Graph、结构化数据（JSON-LD：首页 Organization / 详情页 Article）、`canonical`。【已完成，见 `docs/theme-system.md` §15.5】
 - [ ] **部署工程化**：`Dockerfile` + `pm2` cluster + CI/CD + Nginx 示例配置。
 - [ ] **上传上云**：迁移到 OSS / S3 / 七牛，解耦本地磁盘。
 - [x] **可观测性**：`/healthz` 健康检查 + 全局限流中间件。（`middleware/rateLimit.js` 按 IP 限流，只罩 /api 与 /admin；`/healthz` 查 DB 返回 status/uptime/latency）
 - [x] **API 文档**：Swagger / OpenAPI 自动生成。（`utils/schemas.js` 单一来源 → `utils/openapi.js` 用 `z.toJSONSchema()` 生成；`GET /api/v1/docs`）
 - [x] **测试套件**：单元 + 接口测试。（用 Node 内置 `node:test` 替代 vitest：环境装不上依赖，且零依赖更轻；`pnpm test`，26 项全绿）
-- [ ] **富文本编辑器替换**：ueditor 已停止维护，迁移到 wangEditor / TipTap。
+- [x] **富文本编辑器替换**：ueditor（已停止维护）→ **TipTap v2**，esbuild 自托管打包（`pnpm build:editor` → `public/backend/editor.js`）。
 
 ## 十三、已知问题
 
@@ -291,7 +300,8 @@ pnpm dev          # 默认 http://localhost:3000
 - **缓存后端降级**：若未配置 `REDIS_URL`（或 Redis 连不上），限流计数/权限缓存/会话复核会退回**进程内实现** —
   单实例无碍，多实例会出现"限额被放大 N 倍、权限变更最长 30s 才一致"。`/healthz` 的 `cache` 字段可确认当前后端。
 - 系统设置中"网站地址"为种子数据值，生产请在后台设置页修改。
-- 后台管理 UI 为老版 Ace Admin（jQuery 时代），交互与可维护性落后于现代框架；JSON API（`/api/v1/admin/*`）已就绪，可直接对接现代前端。
+- 后台已完成现代化替换：老 Ace Admin 模板已删除，现为自包含新后台（LiquidJS + Tailwind v4 + TipTap + Lucide，`/backend`）；JSON API（`/api/v1/admin/*`）同时就绪，可供未来 SPA 化复用。
+- 角色 / 权限管理 UI **前台后台都还没有**（RBAC 目前仅在数据层与接口层生效，权限点为 `资源:动作`）。
 
 ---
 
@@ -343,6 +353,7 @@ pnpm dev          # 默认 http://localhost:3000
 - [x] **可运维性三项收尾**：① **审计日志冷热分离** —— 新增 `scripts/audit-archive.js` + `audit_log_archive` 表，事务内「搬运+删除」原子完成，默认保留 90 天（支持 `--days=` / `--dry-run` / `--prune-days=`），建议 cron 每日跑 ② **删除记录时清理孤儿图片** —— 新增 `utils/fileCleanup.js`，按资源字段白名单清理，并做**路径 containment**（`img_url` 被篡改成 `../../` 时拒绝执行，防"任意文件删除"）③ **prevPage 统一走 safeBackPath** —— 补掉 SSR `doEdit` 隐藏域那条漏网的开放重定向，并在源头 `routes/admin.js` 就把 Referer 收敛成站内路径 ④ 端到端实测 6/6 通过（含「upload 目录外文件未被误删」的安全回归）；测试扩到 **77 项**
 - [x] **Koa3 生态横向评审**：拆解 2026 年活跃的三 Koa 项目 —— `koa22`（CLI 脚手架，工程习惯最好）/ `koa23`（TS starter，类型功底最好）/ `koa24`（monorepo 全栈，运维形态最完整），逐项比对后确认：它们的**多数优点本项目已具备**（统一响应体、全局错误兜底、requestId、env 强校验、优雅关闭+连接池关闭、`/healthz` 依赖探测、zod+OpenAPI 单一来源），已产出 [`docs/koa3-projects-review.md`](docs/koa3-projects-review.md)，含媒体存储出海选型建议
 - [x] **第二轮全量审计与整改**（先程序化枚举出 **150 条路由**再测，脚本 60 项断言 + agent-browser 真实浏览器）：修复 11 个问题 —— **SSR 后台写操作完全不进审计**、**`/admin/editorUpload` 绕过上传白名单（且能传 zip/rar/doc = 任意文件托管）**、`uploadvideo` 逻辑 bug、3 个未鉴权空壳写接口、`newslist` 不过滤 `status` 导致**下架内容外泄**、`catelist` 返回整表原始行、`pageSize` 硬编码、**GET 登出可被跨站触发**、死模块 `/admin/user`、`router.all` 注册 40+ HTTP 方法；测试套件扩到 **68 项**
+- [x] **第三轮：前台主题化（LiquidJS）+ SEO 三件套 + 全量清理**：`views/frontend` → `views/themes/default`（`theme.json` + `pages/` + `partials/` + `snippets/`，include 全相对路径），`utils/theme.js` 提供白名单校验 / `?theme=` 预览 / **缺页回退 default**；`public/frontend` → `public/themes/default`；`sitemap.xml` + `robots.txt` + `canonical` + Open Graph + JSON-LD；删除死文件（`model/mongo-sql.js`→改名 `sql-builder.js`、`utils/validate.js` 误删后已恢复、ueditor 测试等）与 `.gitignore` 工程化（忽略上传/密钥/日志/构建产物）；agent-browser 实测前台 6 页 + 主题回退，会话鉴权实测后台 **10 页全 200**，`pnpm test` 68 项全绿。详见 [`docs/theme-system.md`](docs/theme-system.md) §15
 - [x] **接口全矩阵审计与整改**（脚本 33 项断言 + agent-browser 真实浏览器验证）：修复 9 个真实问题 —— 非法 id 返回 500、未知资源 403、可绑定不存在角色、**账号删除后旧会话仍有效**、**开放重定向**、分页统计用错表、校验结果被无声覆盖、删除产生孤儿数据/可删掉最后一个管理员、硬编码（分类 ID 与 pageSize）；测试套件扩到 **48 项**
 
 ### 待办 — P0 安全（上线前必修）

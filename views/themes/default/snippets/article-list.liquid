@@ -20,9 +20,9 @@
   </form>
 
   <!-- 列表 -->
-  {% if articles.size > 0 %}
+  {% if list.size > 0 %}
   <div class="grid gap-5">
-    {% for a in articles %}
+    {% for a in list %}
     <article class="card flex gap-4 p-4 transition hover:shadow-md">
       {% if a.img_url %}<a href="/content/{{ a._id }}" class="shrink-0"><img src="{{ a.img_url }}" alt="{{ a.title }}" class="h-28 w-40 rounded-lg object-cover"></a>{% endif %}
       <div class="min-w-0 flex-1">
@@ -43,13 +43,13 @@
   {% endif %}
 
   <!-- 分页 -->
-  {% if pageInfo.totalPages > 1 %}
+  {% if page.totalPages > 1 %}
   <nav class="mt-8 flex items-center justify-center gap-1">
-    {% if pageInfo.hasPrev %}<a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ pageInfo.page | minus: 1 }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">上一页</a>{% endif %}
-    {% for p in (1..pageInfo.totalPages) %}
-    <a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ p }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border px-3 py-1.5 text-sm {% if p == pageInfo.page %}border-brand-600 bg-brand-600 text-white{% else %}border-gray-200 hover:bg-gray-50{% endif %}">{{ p }}</a>
+    {% if page.hasPrev %}<a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ page.current | minus: 1 }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">上一页</a>{% endif %}
+    {% for p in (1..page.totalPages) %}
+    <a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ p }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border px-3 py-1.5 text-sm {% if p == page.current %}border-brand-600 bg-brand-600 text-white{% else %}border-gray-200 hover:bg-gray-50{% endif %}">{{ p }}</a>
     {% endfor %}
-    {% if pageInfo.hasNext %}<a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ pageInfo.page | plus: 1 }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">下一页</a>{% endif %}
+    {% if page.hasNext %}<a href="{{ pathname }}{% if cateId %}?pid={{ cateId }}&{% else %}?{% endif %}page={{ page.current | plus: 1 }}{% if keyword %}&keyword={{ keyword }}{% endif %}" class="rounded-md border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50">下一页</a>{% endif %}
   </nav>
   {% endif %}
 </section>

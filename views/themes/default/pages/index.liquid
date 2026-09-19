@@ -1,4 +1,4 @@
-{% layout 'frontend/layout', title: '首页' %}
+{% layout '../layout', title: '首页' %}
 {% block content %}
   <!-- 轮播 -->
   <section class="bg-white">
@@ -35,7 +35,7 @@
       <a href="/news" class="text-sm text-brand-600 hover:underline">更多 ›</a>
     </div>
     <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {% for a in articles %}
+      {% for a in newsTop %}
       <article class="card overflow-hidden transition hover:shadow-md">
         <a href="/content/{{ a._id }}">
           {% if a.img_url %}<img src="{{ a.img_url }}" alt="{{ a.title }}" class="aspect-[16/9] w-full object-cover">{% endif %}

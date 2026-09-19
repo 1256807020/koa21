@@ -1,10 +1,8 @@
-{% layout 'frontend/layout', title: article.title %}
+{% layout '../layout', title: article.title %}
 {% block content %}
 <article class="container-page py-10">
   <nav class="mb-4 text-sm text-gray-400">
-    <a href="/" class="hover:text-brand-600">首页</a> /
-    <span class="text-gray-600">{% if article.cate_name %}{{ article.cate_name }}{% else %}内容{% endif %}</span> /
-    <span class="text-gray-600">{{ article.title }}</span>
+    {% for b in breadcrumb %}<a href="{{ b.url | default: '#' }}" class="hover:text-brand-600">{{ b.title }}</a>{% if not forloop.last %} / {% endif %}{% endfor %}
   </nav>
   <h1 class="text-3xl font-bold text-gray-900">{{ article.title }}</h1>
   <div class="mt-3 flex items-center gap-3 text-sm text-gray-400">

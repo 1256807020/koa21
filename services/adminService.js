@@ -3,7 +3,7 @@
 // 管理员（后台用户）业务逻辑层
 // 教学点：
 //   1) 路由只调这里，所有 SQL 都集中在 service，方便复用与测试。
-//   2) 所有 DB 调用都走 mongo-sql 参数化（底层 pg 占位符），从根上杜绝 SQL 注入。
+//   2) 所有 DB 调用都走 sql-builder 参数化（底层 pg 占位符），从根上杜绝 SQL 注入。
 //   3) service 抛出的错误都带 .code（见 utils/code.js），由路由层统一转成 fail()。
 // ============================================================
 const DB = require('../model/db')
@@ -81,7 +81,7 @@ async function list ({ page = 1, pageSize = 10, username = '', keyword = '' } = 
   // keyword 是新后台（/console）与其它通用资源统一的搜索参数名；username 是老接口沿用的参数名，二者等价。
   const kw = keyword || username
   const where = {}
-  // $ilike 由 mongo-sql 翻译成 ILIKE 参数化条件，大小写不敏感
+  // $ilike 由 sql-builder 翻译成 ILIKE 参数化条件，大小写不敏感
   if (kw) where.username = { $ilike: `%${kw}%` }
 
   // 第三个参数用 SAFE_FIELDS 投影，而不是 null(=SELECT *) —— 见上方说明

@@ -287,11 +287,14 @@ SSR 的"动态"是**每次请求实时合成**，内容改了下一个请求就�
 
 ## 9. 模板语法
 
-- **当前**：art-template `{{ }}` + `{{if}}` `{{each}}`（前后端一致，浏览器版 6KB）
-- **可选升级**：LiquidJS（`{{ }}` + `{% if %}` `{% for %}`）——活跃维护，且与 DedeCMS / WordPress / Shopify 的标签心智最接近
-  （见 §12 待确认）
+- ~~art-template `{{ }}` + `{{if}}` `{{each}}`~~ → **已定：LiquidJS**（第二轮已落地，见 §15）
+- LiquidJS：`{{ }}` + `{% if %}` / `{% for %}` / `{% layout %}` / `{% include %}`，活跃维护，
+  与 Shopify / Jekyll / DedeCMS 的标签心智最接近
+- **前后台统一同一个引擎**（`middleware/render.js`），art-template 已彻底移除
 
-**无论选哪个，`{{ }}` 语法不变，后续切换成本可控。**
+**为什么最终选 LiquidJS**：① 前后台一套引擎，心智负担最小；② 主题生态友好（复制主题即用）；
+③ 原生 `layout` / `block` / `include` 正是"母版页 + 片段"所需；
+④ 语法仍是 `{{ }}`，从 art-template 过来成本可控。
 
 ---
 
@@ -424,6 +427,124 @@ SSR 的"动态"是**每次请求实时合成**，内容改了下一个请求就�
 | 中 | SEO 三件套：`sitemap.xml` / `robots.txt` / OG+JSON-LD |
 | 低 | 后台主题管理界面（列出 `themes/` + 切换） |
 | 低 | `config.frontend.cateIds` 硬编码改为后台可配置 |
+
+---
+
+## 15. 第二轮落地：LiquidJS 版主题系统（2026-09-19，**已实现**）
+
+> 第一轮（§14）是按 art-template 落的；第二轮**整体切到 LiquidJS**，并把前台从 `views/frontend/`
+> 迁到 `views/themes/default/`。本章是"照着就能开发一套主题"的**最终操作手册**。
+> （§3 目录图里的 `.html` 与 `views/` 说明是第一轮的历史描述，以本章为准。）
+
+### 15.1 实际目录（`.html` → `.liquid`）
+
+```
+views/themes/default/                     # 一份主题 = 一个目录
+├── theme.json                            # 必需；缺失则不被识别为主题
+├── layout.liquid                         # 母版页：<head> SEO + header/footer + {% block content %}
+├── pages/                                # 6 个页面，名与路由一一对应
+│   ├── index.liquid   news.liquid   case.liquid
+│   ├── content.liquid about.liquid  service.liquid
+├── partials/                             # 被 layout / include 的公共片段
+│   ├── header.liquid  footer.liquid
+└── snippets/                             # 局部片段（首屏渲染；将来 htmx 直接复用）
+    └── article-list.liquid
+
+public/themes/default/                    # 静态资源，URL = /themes/default/...
+├── css/app.css                           # pnpm build:css 由 src/styles/frontend.css 编译而来
+└── js/app.js
+```
+
+模板里统一写 **`{{ theme }}/css/app.css`**（后端注入 `theme = /themes/default`）→ 换主题时皮肤自动跟着换。
+
+### 15.2 ⚠️ LiquidJS 的 include 路径：必须带 `./` `../` 才算"相对本文件"
+
+这是本轮最容易踩的坑（**与 art-template 行为不同**）：
+
+| 写法 | LiquidJS 的解析基准 | 结果 |
+|---|---|---|
+| `{% include 'partials/header' %}` | **渲染 root（`views/`）** → `views/partials/header` | ❌ 错 |
+| `{% include './partials/header' %}` | 当前文件所在目录 → `views/themes/default/partials/header` | ✅ 对 |
+| `{% include '../snippets/article-list' %}`（pages 里） | 当前目录上级 → `.../snippets/article-list` | ✅ 对 |
+
+所以本主题里：`layout.liquid` 写 `{% include './partials/header' %}`；
+`pages/*.liquid` 写 `{% layout '../layout' %}` + `{% include '../snippets/article-list' %}`。
+**好处：整套主题复制改名时，include 一个字都不用改。**
+
+### 15.3 变量契约（**实际生效版**，以此为准）
+
+| 作用域 | 变量 |
+|---|---|
+| 全局 | `site`(`title/logo/url/keywords/description/icp/qq/tel/address`) · `nav` · `links` · `cats` · `theme` · `pathname` · `year` · `canonical` · `ogType` · `ogImage` · `jsonLd` · `__HOST__` |
+| `/` | `focus` · `newsTop` |
+| `/news` `/case` `/service` | `list` · `page` · `subCates` · `cateId` · `keyword` |
+| `/content/:id` | `article` · `prev` · `next` · `breadcrumb` |
+| `/about` | `info` |
+
+`page` 对象：`{ current, pageSize, total, totalPages, hasPrev, hasNext }`。
+
+> 与 §4 的差异仅两处字段名：站点信息用 `site.title`（源列 `site_title` 去前缀）而非 `site.name`；
+> 分页当前页用 `page.current`。以本节为准。
+
+### 15.4 主题解析、回退与预览（`utils/theme.js` + `routes/index.js`）
+
+| 能力 | 实现 |
+|---|---|
+| 主题解析 | `pickTheme()`：`?theme=`（仅本请求预览）> `config.frontend.theme` > `default` |
+| 安全校验 | 主题名白名单 `^[a-z0-9-]{1,32}$` **且**目录内存在 `theme.json`；不合法一律回退 `default`（杜绝 `../` 穿越与绝对路径） |
+| **缺页回退** | 当前主题缺 `pages/<page>.liquid` → 自动渲染 `default` 同名页（换主题不会把站点搞挂） |
+| 资源根 | 注入 `theme = /themes/<name>`（映射 `public/themes/<name>`） |
+| 主题列表 | `listThemes()` 供后台"主题管理"下拉使用（读 `theme.json`） |
+
+### 15.5 SEO（本轮一并落地）
+
+| 项 | 位置 |
+|---|---|
+| `canonical` | `layout.liquid` 输出；`routes/index.js` 按路径计算（详情页取 `/content/:id`） |
+| Open Graph / Twitter | `layout.liquid`：`og:title/description/image/url/type`（详情页 `og:type=article`） |
+| JSON-LD | 首页 `Organization`、详情页 `Article`（`routes/index.js` 注入 `jsonLd`，模板 `{{ jsonLd \| json }}`） |
+| `sitemap.xml` | `GET /sitemap.xml`：首页/列表/分类/全部已发布文章（分页拉取，安全上限 2.5 万条） |
+| `robots.txt` | `GET /robots.txt`：`Allow: /` + `Sitemap:` 指向站点 |
+
+### 15.6 开发一套新主题（LiquidJS 版，5 步）
+
+```bash
+# 1. 复制样板（模板 + 静态资源两处）
+cp -r views/themes/default  views/themes/my-theme
+cp -r public/themes/default public/themes/my-theme
+
+# 2. 改元信息：views/themes/my-theme/theme.json → "name": "my-theme"（必须与目录名一致）
+
+# 3. 换皮肤：改 src/styles/frontend.css 的 Tailwind v4 @theme 变量（配色/字体），然后
+pnpm build:frontend-css
+
+# 4. 改结构：只动 pages/*.liquid，且只用 §15.3 的契约变量；include 保持相对路径
+
+# 5. 预览 / 切换
+#    http://localhost:3000/?theme=my-theme      ← 临时预览，不影响线上
+```
+
+### 15.7 后台不做主题化
+
+后台是**内部工具、不需要 SEO**，模板固定 `views/backend/`、静态资源 `public/backend/`
+（`/backend/css/app.css`），登录页 `views/backend/login.liquid`。主题系统只服务前台。
+
+### 15.8 本轮验证（agent-browser + 会话鉴权实测）
+
+- 前台 6 页正常渲染（导航 / 子分类标签 / 搜索 / 分页 / 详情 / 面包屑 / 上下篇）
+- `?theme=bogus` 安全回退 `default`；`sitemap.xml`、`robots.txt` 正常
+- 未登录访问 `/backend` → 302 到 `/admin/login`
+- 会话鉴权后后台 **10 个页面全部 200**（仪表盘/文章/分类/导航/轮播/友链/管理员/站点设置/审计/统计），管理 API 200
+- `pnpm test` 68 项全绿
+
+### 15.9 下一步（本主题系统相关）
+
+| 优先级 | 事项 |
+|---|---|
+| 高 | `setting` 表加 `theme` 字段 + 后台"主题管理"界面（`listThemes()` 已就绪） |
+| 中 | 建第二套主题做真实验收（`theme.json` + 5 步流程的第一份实战） |
+| 中 | `snippets/` + htmx 局部渲染（分页/筛选，服务端返回 HTML 片段） |
+| 低 | 文章 URL 语义化 slug（`/content/:id` → `/news/:slug`，需 301） |
 
 ---
 

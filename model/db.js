@@ -18,7 +18,7 @@ const { Pool } = require('pg')
 const config = require('./config')
 const createLogger = require('./logger')
 const CODE = require('../utils/code')
-const { assertIdent, quoteIdent, buildWhere, buildSelect, buildOrder } = require('./mongo-sql')
+const { assertIdent, quoteIdent, buildWhere, buildSelect, buildOrder } = require('./sql-builder')
 
 const log = createLogger('db')
 
