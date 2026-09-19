@@ -66,7 +66,7 @@ function can (ctx, permCode) {
 /** 统一 404 / 无权限 页面 */
 async function renderMessage (ctx, title, message, status = 404) {
   ctx.status = status
-  await ctx.render('console/pages/message', { title, message })
+  await ctx.render(backend/pages/message', { title, message })
 }
 
 /** 取表单里用到的下拉数据源（分类 / 角色） */
@@ -116,7 +116,7 @@ router.get('/', async (ctx) => {
     DB.count('article', {}),
     DB.count('articlecate', {})
   ])
-  await ctx.render('console/pages/dashboard', { stats: { article, cate } })
+  await ctx.render(backend/pages/dashboard', { stats: { article, cate } })
 })
 
 // ---------------- 登出 ----------------
@@ -125,7 +125,7 @@ router.post('/logout', async (ctx) => {
   const field = (ctx.request.body && ctx.request.body._csrf) || ctx.get('X-CSRF-Token')
   if (!cookie || !field || cookie !== field) {
     ctx.status = 403
-    await ctx.render('console/pages/message', { title: '操作被拒绝', message: 'CSRF 校验失败，请刷新页面后重试', status: 403 })
+    await ctx.render(backend/pages/message', { title: '操作被拒绝', message: 'CSRF 校验失败，请刷新页面后重试', status: 403 })
     return
   }
   ctx.session = null
@@ -135,13 +135,13 @@ router.post('/logout', async (ctx) => {
 // ---------------- 审计日志（只读）----------------
 router.get('/audit', async (ctx) => {
   if (!can(ctx, 'audit:list')) return renderMessage(ctx, '无权限', '你没有查看审计日志的权限', 403)
-  await ctx.render('console/pages/audit', {})
+  await ctx.render(backend/pages/audit', {})
 })
 
 // ---------------- 统计报表 ----------------
 router.get('/stats', async (ctx) => {
   if (!can(ctx, 'stats:view')) return renderMessage(ctx, '无权限', '你没有查看统计报表的权限', 403)
-  await ctx.render('console/pages/stats', {})
+  await ctx.render(backend/pages/stats', {})
 })
 
 // ---------------- 资源列表 / 单行表编辑 ----------------
@@ -154,7 +154,7 @@ router.get('/:resource', async (ctx) => {
     if (!can(ctx, `${cfg.perm}:update`)) return renderMessage(ctx, '无权限', '你没有编辑该资源的权限', 403)
     const item = await serviceMap[cfg.service].getById()
     const selectOptions = await getSelectOptions()
-    return ctx.render('console/pages/resource-form', {
+    return ctx.render(backend/pages/resource-form', {
       resource: ctx.params.resource, cfg, item: item || {}, isEdit: true,
       formTitle: '编辑' + cfg.label, selectOptions
     })
@@ -165,7 +165,7 @@ router.get('/:resource', async (ctx) => {
   const keyword = ctx.query.keyword || ''
   const data = await listRenderData(ctx, cfg, serviceMap[cfg.service], page, keyword)
   data.canAdd = can(ctx, `${cfg.perm}:create`)
-  await ctx.render('console/pages/resource-list', data)
+  await ctx.render(backend/pages/resource-list', data)
 })
 
 // ---------------- 列表片段（AJAX 局部刷新）----------------
@@ -177,7 +177,7 @@ router.get('/:resource/rows', async (ctx) => {
   const keyword = ctx.query.keyword || ''
   const data = await listRenderData(ctx, cfg, serviceMap[cfg.service], page, keyword)
   data.canAdd = can(ctx, `${cfg.perm}:create`)
-  await ctx.render('console/snippets/resource-list-body', data)
+  await ctx.render(backend/snippets/resource-list-body', data)
 })
 
 // ---------------- 新增表单 ----------------
@@ -186,7 +186,7 @@ router.get('/:resource/create', async (ctx) => {
   if (!cfg || cfg.singleRow) return renderMessage(ctx, '页面不存在', '该资源不支持新增', 404)
   if (!can(ctx, `${cfg.perm}:create`)) return renderMessage(ctx, '无权限', '你没有新增该资源的权限', 403)
   const selectOptions = await getSelectOptions()
-  await ctx.render('console/pages/resource-form', {
+  await ctx.render(backend/pages/resource-form', {
     resource: ctx.params.resource, cfg, item: {}, isEdit: false,
     formTitle: '新增' + cfg.label, selectOptions
   })
@@ -204,7 +204,7 @@ router.get('/:resource/edit/:id', async (ctx) => {
     return renderMessage(ctx, '页面不存在', '记录不存在或已被删除')
   }
   const selectOptions = await getSelectOptions()
-  await ctx.render('console/pages/resource-form', {
+  await ctx.render(backend/pages/resource-form', {
     resource: ctx.params.resource, cfg, item: item || {}, isEdit: true,
     formTitle: '编辑' + cfg.label, selectOptions
   })

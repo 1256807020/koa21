@@ -8,10 +8,10 @@
 </head>
 <body class="h-full bg-gray-100">
   <div class="flex h-full">
-    {% include 'console/partials/sidenav' %}
+    {% include backend/partials/sidenav' %}
 
     <div class="flex min-w-0 flex-1 flex-col">
-      {% include 'console/partials/topbar' %}
+      {% include backend/partials/topbar' %}
 
       <main class="flex-1 overflow-y-auto p-6">
         {% block content %}{% endblock %}

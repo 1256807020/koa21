@@ -9,13 +9,13 @@ const { checkLock, onFailure, onSuccess } = require('../../middleware/loginRateL
 
 // 登录失败统一渲染的错误页（复用 console/error.liquid）
 function loginError (ctx, message) {
-  ctx.render('console/error', {
+  ctx.render(backend/error', {
     message,
     redirect: ctx.state.__HOST__ + '/admin/login'
   })
 }
 router.get('/', async (ctx) => {
-  await ctx.render('console/login')
+  await ctx.render(backend/login')
 })
 router.post('/doLogin', async (ctx) => {
   const username = ctx.request.body.username
@@ -40,7 +40,7 @@ router.post('/doLogin', async (ctx) => {
       if (matched && Number(result[0].status) !== 1) {
         log.warn(`登录失败（账号已禁用）：${username}`)
         await onFailure(username)
-        await ctx.render('console/error', {
+        await ctx.render(backend/error', {
           message: '该账号已被禁用，请联系管理员',
           redirect: ctx.state.__HOST__ + '/admin/login'
         })
@@ -65,7 +65,7 @@ router.post('/doLogin', async (ctx) => {
       } else {
         log.warn(`登录失败（账号或密码错误）：${username}`)
         await onFailure(username)
-        ctx.render('console/error', {
+        ctx.render(backend/error', {
           message: '用户名或者密码错误',
           redirect: ctx.state.__HOST__ + '/admin/login'
         })
@@ -73,7 +73,7 @@ router.post('/doLogin', async (ctx) => {
     } else {
       log.warn(`登录失败（账号不存在）：${username}`)
       await onFailure(username)
-      ctx.render('console/error', {
+      ctx.render(backend/error', {
         message: '用户名或者密码错误',
         redirect: ctx.state.__HOST__ + '/admin/login'
       })
@@ -81,7 +81,7 @@ router.post('/doLogin', async (ctx) => {
   } else {
     log.warn(`登录失败（验证码错误）：${username}`)
     await onFailure(username)
-    ctx.render('console/error', {
+    ctx.render(backend/error', {
       message: '验证码失败',
       redirect: ctx.state.__HOST__ + '/admin/login'
     })
@@ -100,7 +100,7 @@ router.get('/loginOut', async (ctx) => {
   const token = String(ctx.query._csrf || '')
   if (!cookie || !token || cookie !== token) {
     ctx.status = 403
-    return ctx.render('console/error', {
+    return ctx.render(backend/error', {
       message: 'CSRF 校验失败，无法退出登录',
       redirect: (ctx.state.__HOST__ || '') + '/admin'
     })

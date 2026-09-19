@@ -61,7 +61,7 @@ app.use(async (ctx, next) => {
       const message = (config.isProd && c === CODE.UNKNOWN) ? '服务器内部错误' : err.message
       fail(ctx, c, message, null, status)
     } else {
-      await ctx.render('console/error', {
+      await ctx.render('backend/error', {
         message: config.isProd ? '服务器内部错误' : err.message,
         redirect: ctx.state.__HOST__ || '/'
       })

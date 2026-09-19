@@ -1,6 +1,6 @@
-{% layout 'console/layout', title: cfg.label | append: '管理' %}
+{% layout backend/layout', title: cfg.label | append: '管理' %}
 {% block content %}
-  {% include 'console/partials/page-title', title: cfg.label | append: '管理', subtitle: '内容管理' %}
+  {% include backend/partials/page-title', title: cfg.label | append: '管理', subtitle: '内容管理' %}
 
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <form class="flex items-center gap-2" data-search>
@@ -12,6 +12,6 @@
   </div>
 
   <div id="list">
-    {% include 'console/snippets/resource-list-body', resource: resource, columns: columns, rows: rows, pageInfo: pageInfo, keyword: keyword, canEdit: canEdit, canDelete: canDelete, categoryMap: categoryMap, canAdd: canAdd %}
+    {% include backend/snippets/resource-list-body', resource: resource, columns: columns, rows: rows, pageInfo: pageInfo, keyword: keyword, canEdit: canEdit, canDelete: canDelete, categoryMap: categoryMap, canAdd: canAdd %}
   </div>
 {% endblock %}
