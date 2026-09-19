@@ -1,17 +1,17 @@
-{% layout backend/layout', title: cfg.label | append: '管理' %}
+{% layout 'backend/layout', title: cfg.label | append: '管理' %}
 {% block content %}
-  {% include backend/partials/page-title', title: cfg.label | append: '管理', subtitle: '内容管理' %}
+  {% include 'backend/partials/page-title', title: cfg.label | append: '管理', subtitle: '内容管理' %}
 
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <form class="flex items-center gap-2" data-search>
       <input type="text" name="keyword" value="{{ keyword }}" placeholder="搜索{{ cfg.label }}" class="kt-input w-64">
       <button type="submit" class="kt-btn kt-btn-primary">搜索</button>
-      {% if keyword %}<a href="/console/{{ resource }}" class="kt-btn kt-btn-ghost">清除</a>{% endif %}
+      {% if keyword %}<a href="/backend/{{ resource }}" class="kt-btn kt-btn-ghost">清除</a>{% endif %}
     </form>
-    {% if canAdd %}<a href="/console/{{ resource }}/create" class="kt-btn kt-btn-primary">+ 新增{{ cfg.label }}</a>{% endif %}
+    {% if canAdd %}<a href="/backend/{{ resource }}/create" class="kt-btn kt-btn-primary">+ 新增{{ cfg.label }}</a>{% endif %}
   </div>
 
   <div id="list">
-    {% include backend/snippets/resource-list-body', resource: resource, columns: columns, rows: rows, pageInfo: pageInfo, keyword: keyword, canEdit: canEdit, canDelete: canDelete, categoryMap: categoryMap, canAdd: canAdd %}
+    {% include 'backend/snippets/resource-list-body', resource: resource, columns: columns, rows: rows, pageInfo: pageInfo, keyword: keyword, canEdit: canEdit, canDelete: canDelete, categoryMap: categoryMap, canAdd: canAdd %}
   </div>
 {% endblock %}

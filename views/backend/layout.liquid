@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title | default: "管理后台" }} · {{ site.title }}</title>
-  <link rel="stylesheet" href="/console/css/app.css">
+  <link rel="stylesheet" href="/backend/css/app.css">
 </head>
 <body class="h-full bg-gray-100">
   <div class="flex h-full">
-    {% include backend/partials/sidenav' %}
+    {% include 'backend/partials/sidenav' %}
 
     <div class="flex min-w-0 flex-1 flex-col">
-      {% include backend/partials/topbar' %}
+      {% include 'backend/partials/topbar' %}
 
       <main class="flex-1 overflow-y-auto p-6">
         {% block content %}{% endblock %}
@@ -22,10 +22,10 @@
   <div id="kt-toast-wrap"></div>
 
   <!-- Lucide 图标（离线 vendor 的 UMD，createIcons 把 <i data-lucide> 替换为内联 SVG） -->
-  <script src="/console/vendor/lucide.min.js"></script>
+  <script src="/backend/vendor/lucide.min.js"></script>
   <!-- TipTap 富文本编辑器（esbuild 自托管打包，无运行时 CDN 依赖） -->
-  <script src="/console/editor.js"></script>
-  <script type="module" src="/console/app.js"></script>
+  <script src="/backend/editor.js"></script>
+  <script type="module" src="/backend/app.js"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

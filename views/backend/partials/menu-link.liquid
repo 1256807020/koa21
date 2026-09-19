@@ -5,7 +5,7 @@
   {% if active != '/' and pathname != '/' and pathname contains active %}{% assign isActive = true %}{% endif %}
   <li>
     <a href="{{ href }}" class="kt-menu-link {% if isActive %}kt-menu-link-active{% endif %}">
-      {% include backend/partials/icon', name: icon %}
+      {% include 'backend/partials/icon', name: icon %}
       <span>{{ label }}</span>
     </a>
   </li>

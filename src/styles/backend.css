@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@source "../views/backend/**/*.liquid";
 
 /* ============================================================
-   新后台（Console）样式源文件
-   编译：pnpm build:css  →  public/console/css/app.css（生产 minify）
+   新后台（Backend）样式源文件
+   编译：pnpm build:css  →  public/backend/css/app.css（生产 minify）
          pnpm watch:css  →  开发监听
    设计：自包含 Tailwind v4，不依赖 @keenthemes/ktui 运行时。
    调色板沿用 Skotwind 风格（primary=indigo，default-*=gray 阶）。

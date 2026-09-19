@@ -1,6 +1,6 @@
-{% layout backend/layout', title: '审计日志' %}
+{% layout 'backend/layout', title: '审计日志' %}
 {% block content %}
-  {% include backend/partials/page-title', title: '审计日志', subtitle: '系统' %}
+  {% include 'backend/partials/page-title', title: '审计日志', subtitle: '系统' %}
 
   <div class="kt-card">
     <div class="kt-card-header flex flex-wrap items-center justify-between gap-3">
@@ -26,7 +26,7 @@
 
 {% block scripts %}
 <script type="module">
-  import { api, toast, buildPager } from '/console/app.js'
+  import { api, toast, buildPager } from '/backend/app.js'
   const rows = document.getElementById('audit-rows')
   const pager = document.getElementById('audit-pager')
   const totalEl = document.getElementById('audit-total')

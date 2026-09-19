@@ -116,7 +116,7 @@ const auditQuerySchema = pageSchema.extend({
   adminName: z.string().max(50).optional(),
   resource: z.string().max(50).optional(),
   action: z.string().max(20).optional(),
-  // 新后台（/console/audit）统一用 keyword 做模糊搜索（匹配 操作人/资源/动作）
+  // 新后台（/backend/audit）统一用 keyword 做模糊搜索（匹配 操作人/资源/动作）
   keyword: z.string().max(50).optional()
 })
 

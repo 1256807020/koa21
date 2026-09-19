@@ -1,5 +1,5 @@
-// src/console/editor.js
-// TipTap 富文本编辑器（自托管，esbuild 打包到 public/console/editor.js）。
+// src/backend/editor.js
+// TipTap 富文本编辑器（自托管，esbuild 打包到 public/backend/editor.js）。
 // 扫描页面上的 [data-richtext]，在 [data-editor] 上挂载编辑器，并把内容同步到隐藏域。
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -93,7 +93,7 @@ function buildToolbar (editor) {
   return bar
 }
 
-function initConsoleEditors () {
+function initBackendEditors () {
   document.querySelectorAll('[data-richtext]').forEach((wrap) => {
     if (wrap.dataset.tiptap === '1') return
     const mount = wrap.querySelector('[data-editor]')
@@ -117,10 +117,10 @@ function initConsoleEditors () {
   if (window.lucide) window.lucide.createIcons()
 }
 
-window.initConsoleEditors = initConsoleEditors
+window.initBackendEditors = initBackendEditors
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initConsoleEditors)
+  document.addEventListener('DOMContentLoaded', initBackendEditors)
 } else {
-  initConsoleEditors()
+  initBackendEditors()
 }

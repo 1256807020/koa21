@@ -21,8 +21,8 @@ module.exports = [
     }
   },
   {
-    // 后台前端源码：浏览器 ESM（经 esbuild 打包到 public/console/editor.js）
-    files: ['src/console/**/*.js'],
+    // 后台前端源码：浏览器 ESM（经 esbuild 打包到 public/backend/editor.js）
+    files: ['src/backend/**/*.js'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',

@@ -145,9 +145,9 @@ const router = new Router()
 const index = require('./routes/index.js')
 const api = require('./routes/api.js')
 const admin = require('./routes/admin.js')
-// 变量名叫 consoleAdmin 而非 console —— 后者会遮蔽全局 console 对象，
+// 变量名叫 backendAdmin 而非 console —— 后者会遮蔽全局 console 对象，
 // 让本模块后续所有 console.log 直接报错（很隐蔽的坑）。
-const consoleAdmin = require('./routes/console.js')
+const backendAdmin = require('./routes/backend.js')
 
 // 健康检查：给负载均衡 / K8s / 监控探活用（不鉴权、不限流、不渲染模板）
 // 教学点：探活要"轻"，只查最关键的依赖（DB）；不要把业务校验塞进来，否则探活本身会拖垮服务。
@@ -177,7 +177,7 @@ router.get('/healthz', async (ctx) => {
 
 router.use('/admin', admin)
 // 新后台（Skotwind + Liquid），与老后台并存；完成后再切换入口并删除老后台
-router.use('/console', consoleAdmin)
+router.use('/backend', backendAdmin)
 
 // —— API 版本化（P1）——
 // 同一套路由挂两个前缀：新代码/新前端统一用 /api/v1，/api 作为兼容旧路径保留。

@@ -16,7 +16,7 @@
 
       <div class="kt-dropdown-menu" data-dropdown-menu>
         <div class="border-b border-default-200 px-3 py-2 text-sm font-medium text-default-800">{{ userinfo.username }}</div>
-        <form method="post" action="/console/logout" class="p-1">
+        <form method="post" action="/backend/logout" class="p-1">
           <input type="hidden" name="_csrf" value="{{ csrfToken }}">
           <button type="submit" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-default-700 hover:bg-default-100">
             <i data-lucide="log-out" class="size-4"></i>

@@ -27,7 +27,7 @@
           </td>
           {% endfor %}
           <td class="whitespace-nowrap text-right">
-            {% if canEdit %}<a href="/console/{{ resource }}/edit/{{ row._id }}" class="kt-btn kt-btn-outline kt-btn-sm">编辑</a>{% endif %}
+            {% if canEdit %}<a href="/backend/{{ resource }}/edit/{{ row._id }}" class="kt-btn kt-btn-outline kt-btn-sm">编辑</a>{% endif %}
             {% if canDelete %}<button type="button" class="kt-btn kt-btn-danger kt-btn-sm" data-action="delete" data-id="{{ row._id }}">删除</button>{% endif %}
           </td>
         </tr>

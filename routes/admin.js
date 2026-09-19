@@ -1,9 +1,9 @@
 'use strict'
 // routes/admin.js
 // ============================================================
-// /admin 入口：仅承载「登录 / 登出」与「已登录 → /console」的跳转。
+// /admin 入口：仅承载「登录 / 登出」与「已登录 → /backend」的跳转。
 // 旧后台（Ace Admin + art-template）整套 SSR 页面路由与 ueditor 已删除，
-// 后台功能统一由 /console（Liquid + Tailwind）提供。
+// 后台功能统一由 /backend（Liquid + Tailwind）提供。
 // ============================================================
 const Router = require('@koa/router')
 const router = new Router()
@@ -54,6 +54,6 @@ const login = require('./admin/login.js')
 router.use('/login', login)
 
 // 已登录访问 /admin 直接进新后台；未登录会被上面的中间件拦到 /admin/login
-router.get('/', async (ctx) => ctx.redirect((ctx.state.__HOST__ || '') + '/console'))
+router.get('/', async (ctx) => ctx.redirect((ctx.state.__HOST__ || '') + '/backend'))
 
 module.exports = router.routes()
