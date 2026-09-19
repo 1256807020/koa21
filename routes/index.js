@@ -18,6 +18,7 @@ const url = require('url')
 const DB = require('../model/db.js')
 const config = require('../model/config.js')
 const tools = require('../model/tools.js')
+const { toSite } = require('../utils/site.js')
 
 // ---------------- 主题解析 ----------------
 const VIEWS_DIR = path.join(config.root, 'views')
@@ -48,20 +49,7 @@ function enabled () {
   return { $or: [{ status: 1 }, { status: '1' }] }
 }
 
-/** 站点设置 → 契约里的 site（去掉 site_ 前缀，模板写 {{site.title}} 而不是 {{site.site_title}}） */
-function toSite (row = {}) {
-  return {
-    title: row.site_title || '',
-    logo: row.site_logo || '',
-    url: row.site_url || '',
-    keywords: row.site_keywords || '',
-    description: row.site_description || '',
-    icp: row.site_icp || '',
-    qq: row.site_qq || '',
-    tel: row.site_tel || '',
-    address: row.site_address || ''
-  }
-}
+// 站点设置 → 契约里的 site（前后台共用同一个转换，见 utils/site.js）
 
 /** 分页对象（契约 page）：所有列表页形状完全一致 */
 function toPage (current, pageSize, total) {

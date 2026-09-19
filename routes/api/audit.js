@@ -21,8 +21,8 @@ const auditService = require('../../services/auditService')
 router.use(requireLogin)
 
 router.get('/list', requirePermission('audit:list'), handle(async (ctx) => {
-  const { page, pageSize, adminName, resource, action } = parse(auditQuerySchema, ctx.query)
-  ok(ctx, await auditService.list({ page, pageSize, adminName, resource, action }))
+  const { page, pageSize, adminName, resource, action, keyword } = parse(auditQuerySchema, ctx.query)
+  ok(ctx, await auditService.list({ page, pageSize, adminName, resource, action, keyword }))
 }))
 
 module.exports = router.routes()

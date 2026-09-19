@@ -79,11 +79,20 @@ const LIST_FIELDS = {
 }
 
 /** 分页查询审计日志（支持按操作人/资源/动作过滤） */
-async function list ({ page = 1, pageSize = 20, adminName = '', resource = '', action = '' } = {}) {
+async function list ({ page = 1, pageSize = 20, adminName = '', resource = '', action = '', keyword = '' } = {}) {
   const where = {}
   if (adminName) where.admin_name = { $ilike: `%${adminName}%` }
   if (resource) where.resource = resource
   if (action) where.action = action
+  if (keyword) {
+    // 新后台（/console/audit）的搜索框语义：一个关键词同时匹配 操作人 / 资源 / 动作。
+    // 注意每个字段单独建对象，避免共用同一个条件对象被底层改写。
+    where.$or = [
+      { admin_name: { $ilike: `%${keyword}%` } },
+      { resource: { $ilike: `%${keyword}%` } },
+      { action: { $ilike: `%${keyword}%` } }
+    ]
+  }
 
   const rows = await DB.find('audit_log', where, LIST_FIELDS, {
     page,

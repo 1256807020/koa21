@@ -1,0 +1,12 @@
+{% comment %} 侧栏菜单项。参数：href / icon / label / perm(可选) / active(高亮路径) {% endcomment %}
+{% if perm == blank or perms contains perm %}
+  {% assign isActive = false %}
+  {% if pathname == active %}{% assign isActive = true %}{% endif %}
+  {% if active != '/' and pathname != '/' and pathname contains active %}{% assign isActive = true %}{% endif %}
+  <li>
+    <a href="{{ href }}" class="kt-menu-link {% if isActive %}kt-menu-link-active{% endif %}">
+      {% include 'console/partials/icon', name: icon %}
+      <span>{{ label }}</span>
+    </a>
+  </li>
+{% endif %}

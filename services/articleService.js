@@ -16,14 +16,17 @@ const TABLE = 'article'
  * 列表：单条 SQL 用 JOIN 把分类名带出来；支持分页 + 标题模糊 + 分类筛选
  * @returns {Promise<{list:Array,total:number,page:number,pageSize:number}>}
  */
-async function list ({ page = 1, pageSize = 10, title = '', cateId = '' } = {}) {
+async function list ({ page = 1, pageSize = 10, title = '', keyword = '', cateId = '' } = {}) {
+  // keyword 是新后台（/console）与其它通用资源统一的搜索参数名；
+  // title 是老接口沿用的参数名。二者等价，keyword 优先。
+  const kw = keyword || title
   // —— 参数化：where 条件值全部走占位符，表名/列名用白名单常量，杜绝注入 ——
   const whereParams = []
   const where = []
-  if (title) {
-    // 标题模糊搜索：参数化 ILIKE（注意 % 要拼在值里，不要拼进 SQL 字符串）
-    whereParams.push(`%${title}%`)
-    where.push(`a.title ILIKE $${whereParams.length}`)
+  if (kw) {
+    // 标题/作者模糊搜索：参数化 ILIKE（注意 % 要拼在值里，不要拼进 SQL 字符串）
+    whereParams.push(`%${kw}%`)
+    where.push(`(a.title ILIKE $${whereParams.length} OR a.author ILIKE $${whereParams.length})`)
   }
   if (cateId) {
     whereParams.push(cateId)

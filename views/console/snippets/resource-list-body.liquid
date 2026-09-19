@@ -1,0 +1,47 @@
+<div class="kt-card">
+  <div class="overflow-x-auto">
+    <table class="kt-table">
+      <thead>
+        <tr>
+          {% for col in columns %}<th>{{ col.label }}</th>{% endfor %}
+          <th class="text-right">操作</th>
+        </tr>
+      </thead>
+      <tbody id="list-rows">
+        {% for row in rows %}
+        <tr data-id="{{ row._id }}">
+          {% for col in columns %}
+          <td>
+            {% if col.type == 'status' %}
+              {% if row[col.key] == 1 %}<span class="kt-badge kt-badge-success">显示</span>
+              {% else %}<span class="kt-badge kt-badge-muted">隐藏</span>{% endif %}
+            {% elsif col.type == 'datetime' %}
+              {{ row[col.key] | dt }}
+            {% elsif col.type == 'image' %}
+              {% if row[col.key] %}<img src="/{{ row[col.key] }}" class="size-10 rounded object-cover">{% else %}<span class="text-default-400">—</span>{% endif %}
+            {% elsif col.type == 'pid' %}
+              {% assign cname = categoryMap[row[col.key]] %}{% if cname == blank %}一级分类{% else %}{{ cname }}{% endif %}
+            {% else %}
+              {{ row[col.key] }}
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td class="whitespace-nowrap text-right">
+            {% if canEdit %}<a href="/console/{{ resource }}/edit/{{ row._id }}" class="kt-btn kt-btn-outline kt-btn-sm">编辑</a>{% endif %}
+            {% if canDelete %}<button type="button" class="kt-btn kt-btn-danger kt-btn-sm" data-action="delete" data-id="{{ row._id }}">删除</button>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if rows.size == 0 %}
+  <div class="p-10 text-center text-default-500">暂无数据</div>
+  {% endif %}
+
+  <div class="flex items-center justify-between border-t border-default-200 p-4">
+    <span class="text-sm text-default-500">共 {{ pageInfo.total }} 条</span>
+    <div class="kt-pagination" id="list-pager" data-page="{{ pageInfo.page }}" data-pages="{{ pageInfo.totalPages }}"></div>
+  </div>
+</div>

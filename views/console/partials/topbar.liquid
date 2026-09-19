@@ -1,0 +1,29 @@
+<div id="topbar" class="app-header flex h-topbar items-center sticky top-0 z-30 border-b border-default-200 bg-white px-6 shadow-sm">
+  <div class="flex w-full items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <button class="kt-btn lg:hidden" data-sidenav-toggle type="button" aria-label="切换菜单">
+        <i data-lucide="menu" class="size-6"></i>
+      </button>
+      <span class="text-sm font-semibold text-default-700">{{ site.title | default: "Koa CMS" }}</span>
+    </div>
+
+    <div class="relative" data-dropdown>
+      <button type="button" class="flex items-center gap-2 rounded-md p-2 hover:bg-default-100" data-dropdown-toggle>
+        <span class="flex size-9 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{{ userinfo.username | slice: 0, 1 | upcase }}</span>
+        <span class="hidden text-sm font-medium text-default-700 sm:inline">{{ userinfo.username }}</span>
+        <i data-lucide="chevron-down" class="size-4 text-default-500"></i>
+      </button>
+
+      <div class="kt-dropdown-menu" data-dropdown-menu>
+        <div class="border-b border-default-200 px-3 py-2 text-sm font-medium text-default-800">{{ userinfo.username }}</div>
+        <form method="post" action="/console/logout" class="p-1">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+          <button type="submit" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-default-700 hover:bg-default-100">
+            <i data-lucide="log-out" class="size-4"></i>
+            退出登录
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

@@ -139,6 +139,13 @@ render(app, {
   }
 })
 
+// —— 双模板引擎：在 art-template 之上叠加 LiquidJS ——
+// 必须放在 render(app, ...) **之后**：它复用 koa-art-template 已经挂好的 ctx.render，
+// 再包一层"有 .liquid 就走 LiquidJS，否则回退 art-template"。
+// 这样新后台（views/console/**/*.liquid）可以用 Liquid，而老后台 29 个模板零改动。
+const { setupLiquidRender } = require('./middleware/render')
+setupLiquidRender(app)
+
 // ---------------- 7. 静态资源 ----------------
 // setHeaders：给所有静态文件加 X-Content-Type-Options: nosniff，
 // 强制浏览器严格按响应 Content-Type 解析，禁止「嗅探」成可执行的 HTML/JS——
@@ -161,6 +168,9 @@ const router = new Router()
 const index = require('./routes/index.js')
 const api = require('./routes/api.js')
 const admin = require('./routes/admin.js')
+// 变量名叫 consoleAdmin 而非 console —— 后者会遮蔽全局 console 对象，
+// 让本模块后续所有 console.log 直接报错（很隐蔽的坑）。
+const consoleAdmin = require('./routes/console.js')
 
 // 健康检查：给负载均衡 / K8s / 监控探活用（不鉴权、不限流、不渲染模板）
 // 教学点：探活要"轻"，只查最关键的依赖（DB）；不要把业务校验塞进来，否则探活本身会拖垮服务。
@@ -189,6 +199,8 @@ router.get('/healthz', async (ctx) => {
 })
 
 router.use('/admin', admin)
+// 新后台（Skotwind + Liquid），与老后台并存；完成后再切换入口并删除老后台
+router.use('/console', consoleAdmin)
 
 // —— API 版本化（P1）——
 // 同一套路由挂两个前缀：新代码/新前端统一用 /api/v1，/api 作为兼容旧路径保留。

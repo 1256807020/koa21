@@ -1,0 +1,70 @@
+{% layout 'console/layout', title: formTitle %}
+{% block content %}
+  {% include 'console/partials/page-title', title: formTitle, subtitle: cfg.label %}
+
+  <div class="kt-card">
+    <div class="kt-card-header"><h4 class="kt-card-title">{{ formTitle }}</h4></div>
+    <div class="kt-card-content">
+      <form id="resource-form" class="max-w-2xl space-y-4" data-resource="{{ resource }}" data-id="{{ item._id | default: '' }}" data-edit="{{ isEdit }}">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+
+        {% for f in cfg.form %}
+        <div>
+          <label class="kt-label">{{ f.label }}{% if f.required %}<span class="text-red-500">*</span>{% endif %}</label>
+
+          {% if f.type == 'textarea' %}
+            <textarea name="{{ f.key }}" rows="3" class="kt-textarea">{{ item[f.key] | default: '' }}</textarea>
+
+          {% elsif f.type == 'select' %}
+            <select name="{{ f.key }}" class="kt-input">
+              {% if f.source == 'categories' %}<option value="{{ f.pidNone | default: '0' }}">（无）</option>
+                {% for opt in selectOptions.categories %}<option value="{{ opt.value }}" {% if item[f.key] == opt.value %}selected{% endif %}>{{ opt.label }}</option>{% endfor %}
+              {% elsif f.source == 'roles' %}<option value="">（未分配）</option>
+                {% for opt in selectOptions.roles %}<option value="{{ opt.value }}" {% if item[f.key] == opt.value %}selected{% endif %}>{{ opt.label }}</option>{% endfor %}
+              {% else %}
+                {% for opt in f.options %}<option value="{{ opt.value }}" {% if item[f.key] == opt.value %}selected{% endif %}>{{ opt.label }}</option>{% endfor %}
+              {% endif %}
+            </select>
+
+          {% elsif f.type == 'checkbox' %}
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" name="{{ f.key }}" value="1" {% if item[f.key] == 1 %}checked{% endif %} class="size-4 rounded border-default-300 text-primary">
+              <span class="text-sm text-default-600">启用</span>
+            </label>
+
+          {% elsif f.type == 'image' %}
+            {% assign imgVal = item[f.key] | default: '' %}
+            <div class="flex items-center gap-3" data-image-field="{{ f.key }}">
+              <img class="image-preview size-20 rounded border object-cover {% if imgVal == '' %}hidden{% endif %}" src="{% if imgVal != '' %}/{{ imgVal }}{% endif %}">
+              <input type="hidden" name="{{ f.key }}" value="{{ imgVal }}">
+              <input type="file" accept="image/*" class="hidden" data-upload>
+              <button type="button" class="kt-btn kt-btn-outline kt-btn-sm" data-upload-btn>上传图片</button>
+            </div>
+
+          {% elsif f.type == 'richtext' %}
+            <div data-richtext="{{ f.key }}">
+              <div class="rich-editor min-h-64 rounded-md border border-default-300 p-3" data-editor>{{ item[f.key] | default: '' }}</div>
+              <input type="hidden" name="{{ f.key }}" value="{{ item[f.key] | default: '' }}">
+            </div>
+
+          {% elsif f.type == 'number' %}
+            <input type="number" name="{{ f.key }}" value="{{ item[f.key] | default: '' }}" class="kt-input">
+
+          {% elsif f.type == 'password' %}
+            <input type="password" name="{{ f.key }}" autocomplete="new-password" class="kt-input">
+            {% if f.hint %}<p class="kt-help">{{ f.hint }}</p>{% endif %}
+
+          {% else %}
+            <input type="text" name="{{ f.key }}" value="{{ item[f.key] | default: '' }}" class="kt-input">
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="flex gap-2 pt-4">
+          <button type="submit" class="kt-btn kt-btn-primary">保存</button>
+          <a href="/console/{{ resource }}" class="kt-btn kt-btn-outline">返回</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

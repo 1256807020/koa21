@@ -1,51 +1,165 @@
-/* ============================================================
- * 后台（Console）样式入口 —— Tailwind CSS v4
- *
- * Tailwind v4 与 v3 的最大区别：**不再需要 tailwind.config.js**，
- * 配置直接写在 CSS 里（CSS-first）：
- *   @import "tailwindcss"  引入引擎
- *   @source "..."          声明去哪里扫描 class（不写则只扫描入口所在目录）
- *   @theme { ... }         定义设计令牌（替代 v3 的 theme.extend）
- *
- * 构建：
- *   pnpm build:css
- *   → 产出 public/console/css/app.css（静态资源，由 koa-static 提供）
- *
- * ⚠️ 这是「构建一次」的静态产物：改了模板里的 class 需要重新构建。
- *    好处是运行时零开销、零 node_modules 依赖 —— 服务端只管渲染 HTML。
- * ============================================================ */
-
 @import "tailwindcss";
 
-/* Skotwind 的设计令牌（拷贝自 skotwind/src/assets/css/theme.css）
- * ⚠️ 必须放在 ktui 之前：ktui 的样式里用了 border-border / bg-background 这类工具类，
- *    而它们的 --color-* 映射是在这个文件的 `@theme inline` 块里声明的。
- *    少这一行会直接构建失败：Cannot apply unknown utility class `border-border`。
- */
-@import "./theme.css";
+/* ============================================================
+   新后台（Console）样式源文件
+   编译：pnpm build:css  →  public/console/css/app.css（生产 minify）
+         pnpm watch:css  →  开发监听
+   设计：自包含 Tailwind v4，不依赖 @keenthemes/ktui 运行时。
+   调色板沿用 Skotwind 风格（primary=indigo，default-*=gray 阶）。
+   ============================================================ */
 
-/* Skotwind 的组件库（kt-card / kt-btn / kt-input 等类来自这里） */
-@import "@keenthemes/ktui/styles.css";
+@theme inline {
+  /* 主色 */
+  --color-primary: var(--color-indigo-500);
+  --color-primary-foreground: var(--color-white);
+  --color-primary-600: var(--color-indigo-600);
 
-/* 扫描后台模板里的 class（路径相对于本文件） */
-@source "../../views/console/**/*.liquid";
-@source "../../views/console/**/*.html";
-@source "../../public/console/**/*.js";
+  /* 中性阶（模板里用 default-500 这类语义名，方便整体换肤） */
+  --color-default-50: var(--color-gray-50);
+  --color-default-100: var(--color-gray-100);
+  --color-default-150: var(--color-gray-150);
+  --color-default-200: var(--color-gray-200);
+  --color-default-300: var(--color-gray-300);
+  --color-default-400: var(--color-gray-400);
+  --color-default-500: var(--color-gray-500);
+  --color-default-600: var(--color-gray-600);
+  --color-default-700: var(--color-gray-700);
+  --color-default-800: var(--color-gray-800);
+  --color-default-900: var(--color-gray-900);
+  --color-default-950: var(--color-gray-950);
 
-/* ---------------- 设计令牌（换主题只改这里） ----------------
- * 对应 Skotwind 的 theme.css：它本身也是用 CSS 变量定义的，
- * 所以这里可以直接覆盖，实现"同一套模板换配色"。
- */
-@theme {
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif;
+  /* 布局尺度 */
+  --spacing-sidenav: 16rem; /* 256px */
+  --spacing-topbar: 4rem;   /* 64px */
+
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* ---------------- 后台少量自定义 ---------------- */
-:root {
-  color-scheme: light;
+/* 全局基础 */
+body {
+  @apply bg-gray-100 text-default-800 antialiased;
+  font-family: var(--font-body);
 }
 
-/* 表格行 hover（后台列表用得最多） */
-.console-table tbody tr:hover {
-  background: var(--color-zinc-50, #fafafa);
+@layer components {
+  /* —— 卡片 —— */
+  .kt-card {
+    @apply rounded-lg border border-default-200 bg-white shadow-sm;
+  }
+  .kt-card-content { @apply p-5; }
+  .kt-card-header {
+    @apply flex items-center justify-between border-b border-default-200 px-5 py-3;
+  }
+  .kt-card-title { @apply text-base font-semibold text-default-900; }
+
+  /* —— 按钮 —— */
+  .kt-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .kt-btn-primary { @apply bg-primary text-white hover:bg-primary-600; }
+  .kt-btn-outline {
+    @apply border border-default-300 bg-white text-default-700 hover:bg-default-50;
+  }
+  .kt-btn-danger { @apply bg-red-500 text-white hover:bg-red-600; }
+  .kt-btn-ghost { @apply text-default-600 hover:bg-default-100; }
+  .kt-btn-sm { @apply px-3 py-1.5 text-xs; }
+
+  /* —— TipTap 富文本（ProseMirror） —— */
+  .kt-btn.is-active { @apply bg-primary/10 text-primary; }
+  .rich-editor.ProseMirror { @apply min-h-64 rounded-md border border-default-300 p-3 outline-none; }
+  .rich-editor.ProseMirror p { @apply mb-2; }
+  .rich-editor.ProseMirror h2 { @apply mb-2 mt-3 text-lg font-semibold; }
+  .rich-editor.ProseMirror ul { @apply mb-2 list-disc pl-6; }
+  .rich-editor.ProseMirror ol { @apply mb-2 list-decimal pl-6; }
+  .rich-editor.ProseMirror a { @apply text-primary underline; }
+  .rich-editor.ProseMirror img { @apply max-w-full rounded-md; }
+
+  /* —— 确认模态框 —— */
+  .kt-modal-mask { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4; }
+  .kt-modal {
+    @apply w-full max-w-sm rounded-lg bg-white shadow-xl;
+    animation: kt-modal-in .15s ease-out;
+  }
+  .kt-modal-body { @apply px-5 py-4 text-sm text-default-800; }
+  .kt-modal-footer { @apply flex justify-end gap-2 border-t border-default-200 px-5 py-3; }
+  @keyframes kt-modal-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* —— 表单 —— */
+  .kt-label { @apply mb-1.5 block text-sm font-medium text-default-700; }
+  .kt-input {
+    @apply block w-full rounded-md border border-default-300 bg-white px-3 py-2 text-sm text-default-900 placeholder:text-default-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary;
+  }
+  .kt-textarea {
+    @apply block w-full rounded-md border border-default-300 bg-white px-3 py-2 text-sm text-default-900 placeholder:text-default-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary;
+  }
+  .kt-help { @apply mt-1 text-xs text-default-500; }
+  .kt-field-error { @apply mt-1 text-xs text-red-600; }
+
+  /* —— 表格 —— */
+  .kt-table {
+    @apply w-full border-collapse text-sm;
+  }
+  .kt-table thead {
+    @apply border-b border-default-200 bg-default-50 text-left text-xs uppercase tracking-wide text-default-500;
+  }
+  .kt-table th { @apply px-4 py-3 font-medium; }
+  .kt-table tbody { @apply divide-y divide-default-200; }
+  .kt-table tbody tr { @apply hover:bg-default-50; }
+  .kt-table td { @apply px-4 py-3 align-middle text-default-700; }
+
+  /* —— 徽标 —— */
+  .kt-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .kt-badge-success { @apply bg-green-100 text-green-700; }
+  .kt-badge-muted { @apply bg-default-100 text-default-600; }
+  .kt-badge-warning { @apply bg-amber-100 text-amber-700; }
+
+  /* —— 分页 —— */
+  .kt-pagination { @apply inline-flex items-center gap-1; }
+  .kt-page-link {
+    @apply inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-default-200 bg-white px-3 text-sm text-default-700 hover:bg-default-50;
+  }
+  .kt-page-link-active { @apply border-primary bg-primary text-white hover:bg-primary-600; }
+  .kt-page-link-disabled { @apply cursor-not-allowed opacity-50; }
+
+  /* —— 侧栏菜单 —— */
+  .kt-menu { @apply space-y-1; }
+  .kt-menu-section {
+    @apply px-3 py-2 text-xs font-medium uppercase tracking-wide text-default-500;
+  }
+  .kt-menu-link {
+    @apply flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-default-700 transition hover:bg-primary/10 hover:text-primary;
+  }
+  .kt-menu-link-active {
+    @apply bg-primary/10 text-primary;
+  }
+  .kt-menu-icon { @apply size-5 shrink-0; }
 }
+
+/* —— 抽屉（移动端侧栏），纯 CSS 开关 —— */
+#sidenavDrawer {
+  @apply fixed inset-y-0 left-0 z-40 w-sidenav -translate-x-full border-r border-default-200 bg-white transition-transform lg:static lg:translate-x-0;
+}
+#sidenavDrawer.kt-open { @apply translate-x-0; }
+.sidenav-backdrop {
+  @apply fixed inset-0 z-30 bg-black/40 lg:hidden;
+}
+.sidenav-backdrop.kt-open { @apply block; }
+
+/* —— 下拉菜单（点击切换） —— */
+.kt-dropdown-menu {
+  @apply absolute right-0 z-30 mt-2 hidden min-w-48 rounded-lg border border-default-200 bg-white p-2 text-sm shadow-md;
+}
+.kt-dropdown-menu.kt-open { @apply block; }
+
+/* —— 提示条 —— */
+#kt-toast-wrap {
+  @apply fixed right-4 top-4 z-50 flex flex-col gap-2;
+}
+.kt-toast {
+  @apply min-w-64 rounded-md border px-4 py-3 text-sm shadow-md;
+}
+.kt-toast-success { @apply border-green-200 bg-green-50 text-green-800; }
+.kt-toast-error { @apply border-red-200 bg-red-50 text-red-800; }
+.kt-toast-info { @apply border-default-200 bg-white text-default-800; }

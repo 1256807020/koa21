@@ -1,0 +1,30 @@
+{% layout 'console/layout', title: '统计报表' %}
+{% block content %}
+  {% include 'console/partials/page-title', title: '统计报表', subtitle: '系统' %}
+
+  <div id="stats-cards" class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div class="kt-card"><div class="kt-card-content text-default-500">加载中…</div></div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { api, toast } from '/console/app.js'
+  try {
+    const d = await api('/api/v1/admin/stats/overview')
+    const a = d.article || {}
+    const c = d.counts || {}
+    const cards = document.getElementById('stats-cards')
+    const items = [
+      ['文章总数', a.total], ['显示中', a.online], ['已隐藏', a.offline],
+      ['推荐/热门/最新', `${a.best || 0}/${a.hot || 0}/${a.new_count || 0}`],
+      ['分类总数', c.cate_total], ['管理员', c.admin_total],
+      ['轮播', c.focus_total], ['友链', c.link_total]
+    ]
+    cards.innerHTML = items.map(([k, v]) => `<div class="kt-card"><div class="kt-card-content">
+        <p class="text-xs uppercase tracking-wide text-default-500">${k}</p>
+        <h3 class="mt-1 text-2xl font-semibold text-default-900">${v ?? 0}</h3>
+      </div></div>`).join('')
+  } catch (e) { toast(e.message || '加载失败', 'error') }
+</script>
+{% endblock %}

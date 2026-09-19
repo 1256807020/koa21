@@ -77,10 +77,12 @@ async function assertRoleExists (roleId) {
 }
 
 /** 列表（分页 + 按用户名模糊搜索） */
-async function list ({ page = 1, pageSize = 10, username = '' } = {}) {
+async function list ({ page = 1, pageSize = 10, username = '', keyword = '' } = {}) {
+  // keyword 是新后台（/console）与其它通用资源统一的搜索参数名；username 是老接口沿用的参数名，二者等价。
+  const kw = keyword || username
   const where = {}
   // $ilike 由 mongo-sql 翻译成 ILIKE 参数化条件，大小写不敏感
-  if (username) where.username = { $ilike: `%${username}%` }
+  if (kw) where.username = { $ilike: `%${kw}%` }
 
   // 第三个参数用 SAFE_FIELDS 投影，而不是 null(=SELECT *) —— 见上方说明
   const rows = await DB.find(TABLE, where, SAFE_FIELDS, { page, pageSize, sortJson: { add_time: -1 } })

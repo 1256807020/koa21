@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title | default: "管理后台" }} · {{ site.title }}</title>
+  <link rel="stylesheet" href="/console/css/app.css">
+</head>
+<body class="h-full bg-gray-100">
+  <div class="flex h-full">
+    {% include 'console/partials/sidenav' %}
+
+    <div class="flex min-w-0 flex-1 flex-col">
+      {% include 'console/partials/topbar' %}
+
+      <main class="flex-1 overflow-y-auto p-6">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div id="kt-toast-wrap"></div>
+
+  <!-- Lucide 图标（离线 vendor 的 UMD，createIcons 把 <i data-lucide> 替换为内联 SVG） -->
+  <script src="/console/vendor/lucide.min.js"></script>
+  <!-- TipTap 富文本编辑器（esbuild 自托管打包，无运行时 CDN 依赖） -->
+  <script src="/console/editor.js"></script>
+  <script type="module" src="/console/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

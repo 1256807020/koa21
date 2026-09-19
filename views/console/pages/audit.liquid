@@ -1,0 +1,60 @@
+{% layout 'console/layout', title: '审计日志' %}
+{% block content %}
+  {% include 'console/partials/page-title', title: '审计日志', subtitle: '系统' %}
+
+  <div class="kt-card">
+    <div class="kt-card-header flex flex-wrap items-center justify-between gap-3">
+      <h4 class="kt-card-title">操作记录</h4>
+      <input type="text" name="keyword" placeholder="搜索操作人 / 资源" class="kt-input w-64" data-audit-search>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="kt-table">
+        <thead>
+          <tr><th>操作人</th><th>动作</th><th>资源</th><th>方法</th><th class="max-w-xs">路径</th><th>状态</th><th>时间</th></tr>
+        </thead>
+        <tbody id="audit-rows">
+          <tr><td colspan="7" class="text-center text-default-500">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="flex items-center justify-between border-t border-default-200 p-4">
+      <span class="text-sm text-default-500" id="audit-total">—</span>
+      <div class="kt-pagination" id="audit-pager" data-page="1" data-pages="1"></div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { api, toast, buildPager } from '/console/app.js'
+  const rows = document.getElementById('audit-rows')
+  const pager = document.getElementById('audit-pager')
+  const totalEl = document.getElementById('audit-total')
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  let keyword = ''
+  async function load (page = 1) {
+    try {
+      const d = await api(`/api/v1/admin/audit/list?page=${page}&pageSize=15&keyword=${encodeURIComponent(keyword)}`)
+      const list = d.list || []
+      rows.innerHTML = list.length
+        ? list.map((r) => `<tr>
+            <td>${esc(r.admin_name)}</td>
+            <td>${esc(r.action)}</td>
+            <td>${esc(r.resource)}</td>
+            <td>${esc(r.method)}</td>
+            <td class="max-w-xs truncate" title="${esc(r.path)}">${esc(r.path)}</td>
+            <td>${r.status === 200 ? '<span class="kt-badge kt-badge-success">成功</span>' : '<span class="kt-badge kt-badge-warning">' + r.status + '</span>'}</td>
+            <td>${new Date(r.created_at).toLocaleString('zh-CN')}</td>
+          </tr>`).join('')
+        : '<tr><td colspan="7" class="text-center text-default-500">暂无数据</td></tr>'
+      totalEl.textContent = '共 ' + d.total + ' 条'
+      pager.dataset.page = d.page
+      // 审计接口返回 {list,total,page,pageSize}，没有 totalPages，这里按每页 15 条自算
+      pager.dataset.pages = d.totalPages || Math.max(1, Math.ceil((d.total || 0) / 15))
+      buildPager(pager, (p) => load(p))
+    } catch (e) { toast(e.message || '加载失败', 'error') }
+  }
+  document.querySelector('[data-audit-search]')?.addEventListener('input', (e) => { keyword = e.target.value; load(1) })
+  load(1)
+</script>
+{% endblock %}

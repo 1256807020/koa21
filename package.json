@@ -17,7 +17,9 @@
     "lint": "eslint .",
     "audit:archive": "node scripts/audit-archive.js",
     "build:css": "tailwindcss -i src/styles/console.css -o public/console/css/app.css --minify",
-    "watch:css": "tailwindcss -i src/styles/console.css -o public/console/css/app.css --watch"
+    "watch:css": "tailwindcss -i src/styles/console.css -o public/console/css/app.css --watch",
+    "build:editor": "esbuild src/console/editor.js --bundle --minify --format=iife --outfile=public/console/editor.js",
+    "build": "pnpm build:css && pnpm build:editor"
   },
   "keywords": [
     "koa",
@@ -30,6 +32,11 @@
     "@koa/cors": "5.0.0",
     "@koa/multer": "4.0.0",
     "@koa/router": "15.7.0",
+    "@tiptap/core": "^2.27.3",
+    "@tiptap/extension-image": "^2.27.3",
+    "@tiptap/extension-link": "^2.27.3",
+    "@tiptap/pm": "^2.27.3",
+    "@tiptap/starter-kit": "^2.27.3",
     "art-template": "4.13.4",
     "bcryptjs": "3.0.3",
     "dayjs": "1.11.23",
@@ -39,6 +46,7 @@
     "koa-bodyparser": "4.4.1",
     "koa-session": "7.0.2",
     "koa-static": "5.0.0",
+    "liquidjs": "10.29.0",
     "log4js": "6.9.1",
     "multer": "2.4.0",
     "pg": "8.23.0",
@@ -52,8 +60,10 @@
     "@keenthemes/ktui": "1.2.7",
     "@tailwindcss/cli": "^4.3.3",
     "cross-env": "10.1.0",
+    "esbuild": "0.28.2",
     "eslint": "10.10.0",
     "globals": "17.12.0",
+    "lucide": "1.47.0",
     "nodemon": "3.1.7",
     "tailwindcss": "^4.3.3"
   }
